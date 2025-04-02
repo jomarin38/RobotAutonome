@@ -1,7 +1,7 @@
 from missionPlanner import generate_mission
 from positionDisplay import display_position
 #from positionUpdater import update_position
-from Aruco_detection import update_position
+from Aruco_detection import main
 from rcControl import rc_control
 import globals
 import threading
@@ -24,8 +24,8 @@ rc_control_thread = threading.Thread(target=rc_control)
 rc_control_thread.start()
 """
 
-#position_updater_thread = threading.Thread(target=update_position)
-#position_updater_thread.start()
+position_updater_thread = threading.Thread(target=main)
+position_updater_thread.start()
 
 #time.sleep(20)
 
