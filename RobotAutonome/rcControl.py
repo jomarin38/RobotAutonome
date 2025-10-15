@@ -4,9 +4,15 @@ import time
 
 import serial
 
-def rc_control():
+from simulateur import Sim
+
+sim = Sim()
+running, observation = sim.reset((500, 500, 0))
+
+def rc_control(throttle_command_buffer, turn_command_buffer):
 
     port_name = '/dev/ttyACM0'
+    #port_name = '/dev/ttyUSB0'
     baud_rate = 115200
 
     #coeff_throttle = 0.25
@@ -23,25 +29,30 @@ def rc_control():
 
     throttle = 0
     stearing = 0
+    slide = 0
 
-    while True:
+    initial_time = time.time()
+
+    while len(throttle_command_buffer) > 0 or len(turn_command_buffer) > 0:
         current_time = time.time()
-        if (len(globals.throttle_command_buffer)>0):
-            if globals.throttle_command_buffer[0]['time']>current_time:
-                throttle =  globals.throttle_command_buffer[0]['value'] * coeff_throttle
+        if len(throttle_command_buffer) > 0:
+            if initial_time + throttle_command_buffer[0]['time'] > current_time:
+                throttle =  throttle_command_buffer[0]['value'] * coeff_throttle
             else:
-                globals.throttle_command_buffer.pop(0)
+                throttle_command_buffer.pop(0)
         else:
             throttle = 0
-        if (len(globals.turn_command_buffer)>0):
-            if globals.turn_command_buffer[0]['time']>current_time:
-                stearing =  globals.turn_command_buffer[0]['value'] * coeff_stearing
+        if len(turn_command_buffer) > 0:
+            if initial_time + turn_command_buffer[0]['time'] > current_time:
+                stearing =  turn_command_buffer[0]['value'] * coeff_stearing
             else:
-                globals.turn_command_buffer.pop(0)
+                turn_command_buffer.pop(0)
         else:
             stearing = 0
-        bus.write((str(throttle) + ' ' + str(stearing) + '\n').encode())
-        print('command : ' + str(throttle) + ' ' + str(stearing))
+
+        order = str(throttle) + ' ' + str(stearing) + ' ' + str(slide)
+        bus.write(('\n' + order).encode())
+        #print(f"command :  {str(order)}")
         time.sleep(0.1)
 
 
