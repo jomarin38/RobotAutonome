@@ -14,3 +14,5 @@ def init():
     direction_target = 0
     vitesse = 100
     direction_vitesse = 100
+
+    start_pos_sim = (500, 500, 0)

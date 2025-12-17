@@ -66,7 +66,7 @@ class Sim:
         return self._target_point
 
     @target_point.setter
-    def target_point(self, point):
+    def target_point(self, point: tuple[int, int, int]):
         self._target_point = point
 
     def get_observation(self):
@@ -89,7 +89,7 @@ class Sim:
         self.robot.move(translate_move, translate=True, dt=dt)
         
         running = self.update()
-        return running
+        return running, self.get_observation()
         
     def set_pos(self, *args):
         self.robot.set_pos(*args)
@@ -102,7 +102,7 @@ class Sim:
                 self.running = False
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1: # Clic gauche
-                    self.target_point = event.pos
+                    self.target_point = (*event.pos, 0)
         
         # Remplir la fenetre de blanc
         self.window.fill((255, 255, 255))
@@ -138,7 +138,7 @@ class Sim:
 
         # Si un point cible est selectionne, tracer un cercle
         if self.target_point is not None:
-            pygame.draw.circle(self.window, (255, 0, 0), self.target_point, 10)
+            pygame.draw.circle(self.window, (255, 0, 0), (self.target_point[0], self.target_point[1]), 10)
 
             # Afficher les coordonées de la cible au dessus d'elle
             x_target_text = self.font.render(f"x: {int(self.target_point[0])}", True, (0, 0, 0))
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     running, observation = sim.reset((500, 500, 0))
     while running:
         dt = sim.get_dt()
-        running = sim.move(rotate=1, before_move=1, translate_move=0, dt=dt)
+        running, _ = sim.move(rotate=1, before_move=1, translate_move=0, dt=dt)
         
         """
         x_robot, y_robot, _, pos_target = sim.get_observation()

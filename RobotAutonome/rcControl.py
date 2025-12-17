@@ -6,10 +6,18 @@ import serial
 
 from simulateur import Sim
 
-sim = Sim()
-running, observation = sim.reset((500, 500, 0))
+from typing import Optional
 
-def rc_control(throttle_command_buffer, turn_command_buffer):
+import redis
+redis_host='localhost'
+redis_port=6379
+redis_db=0
+
+r = redis.StrictRedis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
+
+
+
+def rc_control(throttle_command_buffer, turn_command_buffer, sim: Optional[Sim]):
 
     port_name = '/dev/ttyACM0'
     #port_name = '/dev/ttyUSB0'
@@ -22,8 +30,8 @@ def rc_control(throttle_command_buffer, turn_command_buffer):
     coeff_stearing = 1.0
 
     # Use a breakpoint in the code line below to debug your script.
-    bus = serial.Serial(port=port_name, baudrate=baud_rate, parity=serial.PARITY_NONE,
-                        stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=0.2)
+    #bus = serial.Serial(port=port_name, baudrate=baud_rate, parity=serial.PARITY_NONE,
+                      #  stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=0.2)
 
     previous_time = time.time()
 
@@ -50,9 +58,18 @@ def rc_control(throttle_command_buffer, turn_command_buffer):
         else:
             stearing = 0
 
-        order = str(throttle) + ' ' + str(stearing) + ' ' + str(slide)
-        bus.write(('\n' + order).encode())
+
+
+        if sim:
+            dt = sim.get_dt()
+            _, obs = sim.move(rotate=-stearing/90, before_move=throttle/38, translate_move=slide/100, dt=dt)
+            r.set('x_position', obs[0])
+            r.set('y_position', obs[1])
+            r.set('direction', obs[2])
+
+        #order = str(throttle) + ' ' + str(stearing) + ' ' + str(slide)
+        #bus.write(('\n' + order).encode())
         #print(f"command :  {str(order)}")
-        time.sleep(0.1)
+        #time.sleep(0.1)
 
 

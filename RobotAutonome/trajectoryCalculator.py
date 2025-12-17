@@ -55,7 +55,10 @@ def generate_trajectory(x_target, y_target, direction_target):
     turn_command_buffer.append({'time': current_time ,
                                         'value': 0})
     current_time_direction += turn_move_duration
-    sens = delta_angle / abs(delta_angle)
+    if abs(delta_angle)>0:
+        sens = delta_angle / abs(delta_angle)
+    else:
+        sens = 1
     turn_command_buffer.append({'time': current_time_direction,
                                         'value': sens * direction_vitesse})
     current_time_direction += 0.1
