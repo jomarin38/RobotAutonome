@@ -1,9 +1,10 @@
 import sys
 import pygame
 import math
+import time
 
 class Robot(pygame.sprite.Sprite):
-    def __init__(self, x, y, angle):
+    def __init__(self, x, y, angle, coef_rotate, coef_forward):
         super().__init__()
         self.image = pygame.image.load("robot.png")
         self.rect = self.image.get_rect()
@@ -12,10 +13,12 @@ class Robot(pygame.sprite.Sprite):
         self.original_image = self.image
         self.position_x = self.rect.centerx
         self.position_y = self.rect.centery
+        self.coef_rotate = coef_rotate
+        self.coef_forward = coef_forward
 
     def rotate(self, angle, dt=1):
         old_center = self.rect.center
-        self.angle += angle * dt
+        self.angle += angle * dt / self.coef_rotate
         self.angle %= 360
         self.image = pygame.transform.rotate(self.original_image, -self.angle)
         self.rect = self.image.get_rect()
@@ -25,23 +28,31 @@ class Robot(pygame.sprite.Sprite):
         radian_angle = math.radians(self.angle + (translate * 90))
         dx = distance * math.cos(radian_angle)
         dy = distance * math.sin(radian_angle)
-        self.position_x += dx * dt
-        self.position_y += dy * dt
+        self.position_x += dx * dt / self.coef_forward
+        self.position_y += dy * dt / self.coef_forward
         self.rect.center = (int(self.position_x), int(self.position_y))
-    
+
     def set_pos(self, x, y, angle):
         self.position_x = x
         self.position_y = y
         self.angle = angle
-        
-        self.rect.center = (int(self.position_x), int(self.position_y))
         self.image = pygame.transform.rotate(self.original_image, -self.angle)
         self.rect = self.image.get_rect()
         self.rect.center = (int(self.position_x), int(self.position_y))
 
 
 class Sim:
-    def __init__(self, window_size=(1000, 700), tick_rate=60):      
+    def __init__(
+        self,
+        coef_rotate,
+        coef_forward,
+        window_size=(1000, 700),
+        tick_rate=60,
+        inertie_factor=0.1,
+        inertie_factor_rotate=None,
+        inertie_factor_forward=None,
+        inertie_factor_translate=None,
+    ):      
         pygame.init()
 
         self.window = pygame.display.set_mode(window_size)
@@ -54,11 +65,33 @@ class Sim:
         self.running = True
 
         self.tick_rate = tick_rate
+        
+        self.coef_rotate = coef_rotate
+        self.coef_forward = coef_forward
+
+        self.rotation_speed = 0
+        self.forward_speed = 0
+        self.translate_speed = 0
+
+        if inertie_factor_rotate is None:
+            inertie_factor_rotate = inertie_factor
+        if inertie_factor_forward is None:
+            inertie_factor_forward = inertie_factor
+        if inertie_factor_translate is None:
+            inertie_factor_translate = inertie_factor
+
+        self.inertie_coeff_rotate = 1 - inertie_factor_rotate
+        self.inertie_coeff_forward = 1 - inertie_factor_forward
+        self.inertie_coeff_translate = 1 - inertie_factor_translate
 
     def reset(self, robot_position):
-        self.robot = Robot(*robot_position)
+        self.robot = Robot(*robot_position, coef_rotate=self.coef_rotate, coef_forward=self.coef_forward)
         self.target_point = None
         self.running = True
+        self.prev_time = time.perf_counter()
+        self.rotation_speed = 0
+        self.forward_speed = 0
+        self.translate_speed = 0
         return self.running, self.get_observation()
 
     @property
@@ -81,15 +114,30 @@ class Sim:
         self._tick_rate = tick_rate
 
     def get_dt(self):
-        return self.clock.tick(self.tick_rate) / 10
+        current_time = time.perf_counter()
+        dt = current_time - self.prev_time
+        self.prev_time = current_time
+        return dt
     
-    def move(self, rotate=0, before_move=0, translate_move=0, dt=1):
+    def _clamp(self, x, lo, hi):
+        return min(max(x, lo), hi)
+
+    def move(self, rotate=0, before_move=0, translate_move=0):
+        if rotate != 0:
+            self.rotation_speed = rotate
+        if before_move != 0:
+            self.forward_speed = before_move
+        if translate_move != 0:
+            self.translate_speed = translate_move
+
+        running = self.update()
+        return running, self.get_observation()
+
+    def _move(self, rotate=0, before_move=0, translate_move=0):
+        dt = self.get_dt()
         self.robot.rotate(rotate, dt=dt)
         self.robot.move(before_move, translate=False, dt=dt)
         self.robot.move(translate_move, translate=True, dt=dt)
-        
-        running = self.update()
-        return running, self.get_observation()
         
     def set_pos(self, *args):
         self.robot.set_pos(*args)
@@ -97,6 +145,11 @@ class Sim:
         return running
 
     def update(self):
+        self._move(self.rotation_speed, self.forward_speed, self.translate_speed)
+        self.rotation_speed *= self.inertie_coeff_rotate
+        self.forward_speed *= self.inertie_coeff_forward
+        self.translate_speed *= self.inertie_coeff_translate
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -152,31 +205,18 @@ class Sim:
 
     def close(self):
         pygame.quit()
-        sys.exit()
-
-
-if __name__ == "__main__":
-    sim = Sim(tick_rate=60, window_size=(1000, 1000))
-    running, observation = sim.reset((500, 500, 0))
-    while running:
-        dt = sim.get_dt()
-        running, _ = sim.move(rotate=1, before_move=1, translate_move=0, dt=dt)
-        
-        """
-        x_robot, y_robot, _, pos_target = sim.get_observation()
-        
-        if pos_target:
-            x_move = pos_target[0] - x_robot
-            y_move = -(pos_target[0] - y_robot)
-            
-            #x_move = max(min(x_robot, 5), -5)
-            #y_move = max(min(y_robot, 5), -5)
-            
-            print(x_move, y_move)
-            
-            running = sim.update(rotate=1, before_move=x_move, translate_move=y_move, dt=dt)
-        else:
-            running = sim.update(rotate=0, before_move=0, translate_move=0, dt=dt)"""
-
-    sim.close()
     
+    
+if __name__ == "__main__":
+    sim = Sim(window_size=(1300, 700), tick_rate=60, coef_rotate=1.105, coef_forward=0.38)
+    running, _ = sim.reset((500, 300, 0))
+    obs = (0, 0, 0)
+    start_time = time.time()
+    
+    while obs[2] <= 270:
+        _, obs = sim.move(rotate=100)
+    
+    print(f"temps : {time.time() - start_time}")
+    print(f"angle total : {obs[2]}")
+    print(f"vitesse : {obs[2]/(time.time() - start_time)}°/s")
+    sim.close()
