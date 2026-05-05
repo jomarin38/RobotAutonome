@@ -1,0 +1,36 @@
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+
+serial:
+  port_name: "/dev/ttyUSB0"
+  baud_rate: 115200
+  timeout: 0.2
+
+sim:
+  tick_rate: 60
+  start_position:
+    x: 500
+    y: 400
+    direction: 0
+  window:
+    width: 1300
+    height: 700
+
+movement_coeff:
+  forward: 0.38
+  translate: 1.0
+  rotate: 1.105
+
+inertie_factor:
+  forward: 0.9
+  translate: 0.9
+  rotate: 0.4
+
+utils:
+  logger:
+    log_freq: 0.5
+
+others:
+  prev_pos_buffer_len: 100
