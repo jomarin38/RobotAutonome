@@ -4,9 +4,13 @@ redis:
   db: 0
 
 serial:
-  port_name: "/dev/ttyUSB0"
-  baud_rate: 115200
+  port_name: "COM26"
+  baud_rate: 9600
   timeout: 0.2
+
+bluetooth:
+  adress: "F0:F5:64:8C:CB:07"
+  char_uuid: "00001101-0000-1000-8000-00805f9b34fb"
 
 sim:
   tick_rate: 60
@@ -24,9 +28,9 @@ movement_coeff:
   rotate: 1.105
 
 inertie_factor:
-  forward: 0.9
-  translate: 0.9
-  rotate: 0.4
+  forward: 0.0 #0.9
+  translate: 0.0 # 0.9
+  rotate: 0.0 # 0.4
 
 utils:
   logger:

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import sys
+import threading
 import time
 import traceback
 from abc import ABC
@@ -17,6 +19,7 @@ from multiprocessing.queues import Queue as MpQueue
 from typing import Optional, Callable, TYPE_CHECKING, Any
 
 import colorama
+from bleak import BleakClient
 from redis import Redis, StrictRedis
 
 import serial
@@ -57,6 +60,7 @@ class LoggingLevelData:
     level: int
     name: str
 
+
 class LoggingLevel(Enum):
     """Niveaux de logging disponibles."""
     DEBUG = LoggingLevelData(level=auto(), name=colorama.Fore.GREEN + "DEBUG" + colorama.Fore.RESET)
@@ -71,6 +75,9 @@ class ProcessNames(str, Enum):
     TRAJECTORY_CALCULATOR = "Trajectory calculator"
     MAIN = "Main"
     LOGGER = "LOGGER"
+
+
+
 
 
 class DataClassUtils(ABC):
@@ -175,23 +182,32 @@ class RobotPosHandler(DataClassUtils):
     redis_handler: Optional[RobotPosRedisHandler] = field(default=None)
 
 
+class ControlHandlerBase:
+    ...
+
+
 @dataclass(frozen=True)
-class ControlSimHandler(DataClassUtils):
+class ControlSimHandler(DataClassUtils, ControlHandlerBase):
     """Handler de contrôle pour le mode simulation."""
     sim: Sim
     redis_db: Redis
 
 
 @dataclass(frozen=True)
-class ControlSerialHandler(DataClassUtils):
+class ControlSerialHandler(DataClassUtils, ControlHandlerBase):
     """Handler de contrôle pour le mode série."""
     config: SerialConfig
 
 
 @dataclass(frozen=True)
-class ControlI2CHandler(DataClassUtils):
+class ControlI2CHandler(DataClassUtils, ControlHandlerBase):
     """Handler de contrôle pour le mode I2C (non implémenté)."""
     ...
+
+
+@dataclass(frozen=True)
+class ControlBluetoothHandler(DataClassUtils, ControlHandlerBase):
+    bluetooth_manager: BluetoothManager
 
 
 @dataclass(frozen=True)
@@ -200,6 +216,7 @@ class ControlHandler(DataClassUtils):
     sim_handler: ControlSimHandler
     serial_handler: ControlSerialHandler
     i2c_handler: ControlI2CHandler
+    bluetooth_handler: ControlBluetoothHandler
 
 
 @dataclass(frozen=True)
@@ -226,11 +243,22 @@ class I2CEnvHandler(DataClassUtils):
     use_control_handler: Callable[[ControlHandler], ControlI2CHandler]
 
 
+@dataclass(frozen=True)
+class BluetoothEnvHandler(DataClassUtils):
+    """Configuration environnement bluetooth."""
+    use_target_handler: Callable[[TargetHandler], TargetRedisHandler]
+    use_robot_pos_handler: Callable[[RobotPosHandler], RobotPosRedisHandler]
+    use_control_handler: Callable[[ControlHandler], ControlBluetoothHandler]
+
+
 class EnvHandler(Enum):
     """Énumération des environnements disponibles."""
     SIM = SimEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "sim_handler"), use_robot_pos_handler=lambda robot_pos_handler: getattr(robot_pos_handler, "sim_handler"), use_control_handler=lambda control_data: getattr(control_data, "sim_handler"))
     SERIAL = SerialEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"), use_robot_pos_handler=lambda robot_pos_handler: getattr(robot_pos_handler, "redis_handler"), use_control_handler=lambda control_data: getattr(control_data, "serial_handler"))
-    I2C = I2CEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"), use_robot_pos_handler=lambda robot_pos_handler: getattr(robot_pos_handler, "redis_handler"), use_control_handler=lambda control_data: getattr(control_data, "i2c_handler"))
+    I2C = I2CEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"), use_robot_pos_handler=lambda robot_pos_handler: getattr(robot_pos_handler, "redis_handler"), use_control_handler=lambda control_data: getattr(control_data, "bluetooth_handler"))
+    BLUETOOTH = BluetoothEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"),
+                        use_robot_pos_handler=lambda robot_pos_handler: getattr(robot_pos_handler, "redis_handler"),
+                        use_control_handler=lambda control_data: getattr(control_data, "bluetooth_handler"))
 
 
 # ============================================================================
@@ -353,6 +381,24 @@ class LoggerAPI:
 
 
 # ============================================================================
+# LOGGING
+# ============================================================================
+
+class BluetoothManager:
+    def __init__(self, config: Config):
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._config = config
+
+    async def _send(self, command: Command):
+        async with BleakClient(self._config.bluetooth.adress) as client:
+            await client.write_gatt_char(self._config.bluetooth.char_uuid, f"{command.forward};{command.translate};{command.rotate}".encode())
+
+    def send(self, command: Command):
+        asyncio.run_coroutine_threadsafe(self._send(command), self._loop)
+
+
+# ============================================================================
 # GESTION DES CIBLES (GET/SET)
 # ============================================================================
 
@@ -362,7 +408,7 @@ def get_target(data) -> Position:
 
 @singledispatch
 def set_target(data) -> Position:
-    raise NotImplementedError(f"No handler for type {type(data).__name__}")
+    raise NotImplementedError(f"No handler for type {type(data)}")
 
 @get_target.register(TargetSimHandler)
 def _(sim_handler: TargetSimHandler) -> Position:
@@ -388,7 +434,7 @@ def _(redis_handler: TargetRedisHandler) -> Position:
 
 @set_target.register(TargetRedisHandler)
 def _(redis_handler: TargetRedisHandler) -> Optional[Position]:
-    return get_target(redis_handler.redis_db)
+    return get_target(redis_handler)
 
 
 # ============================================================================
@@ -399,7 +445,7 @@ def create_redis_client(cfg: RedisConfig) -> Redis:
     """Crée et retourne un client Redis."""
     return StrictRedis(host=cfg.host, port=cfg.port, db=cfg.db, decode_responses=True)
 
-def get_robot_pose(redis_db: Redis) -> Position:
+def get_robot_pose(redis_db: Redis, process_name: ProcessNames, logger: Optional[LoggerAPI] = None) -> Position:
     """Récupère la position du robot depuis Redis."""
     x_position_raw = redis_db.get('x_position')
     y_position_raw = redis_db.get('y_position')
@@ -434,7 +480,7 @@ def send_command(data, _command: Command) -> bool:
     raise NotImplementedError(f"No handler for type {type(data).__name__}")
 
 @send_command.register(ControlSimHandler)
-def _(sim_handler: ControlSimHandler, command: Command) -> bool:
+def _(sim_handler: ControlSimHandler, command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
     """Envoie une commande au simulateur."""
     running, obs = sim_handler.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
     sim_handler.redis_db.set('x_position', obs.robot_position.x)
@@ -443,7 +489,7 @@ def _(sim_handler: ControlSimHandler, command: Command) -> bool:
     return running
 
 @send_command.register(ControlSerialHandler)
-def _(serial_handler: ControlSerialHandler, command: Command, logger_or_none: Optional[LoggerAPI]) -> bool:
+def _(serial_handler: ControlSerialHandler, command: Command, logger_or_none: Optional[LoggerAPI] = None) -> bool:
     """Envoie une commande via le port série."""
     global serial_bus
     logger = logger_or_none or type("NotLoggerAPI", (LoggerAPI,), {"log": lambda msg, process_name, logging_level: None})()
@@ -460,8 +506,13 @@ def _(serial_handler: ControlSerialHandler, command: Command, logger_or_none: Op
     return True
 
 @send_command.register(ControlI2CHandler)
-def _(_i2c_handler: ControlI2CHandler, _command: Command, _logger_or_none: Optional[LoggerAPI]) -> bool:
+def _(_i2c_handler: ControlI2CHandler, _command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
     raise NotImplementedError("I2C control not implemented yet")
+
+@send_command.register(ControlBluetoothHandler)
+def _(bluetooth_handler: ControlBluetoothHandler, command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
+    bluetooth_handler.bluetooth_manager.send(command)
+    return True
 
 # ============================================================================
 # TYPES ALIAS

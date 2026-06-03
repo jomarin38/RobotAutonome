@@ -14,7 +14,7 @@ from simulateur import Sim
 from trajectoryCalculator import generate_trajectory
 
 CONFIG_FILE = "config.yml"
-ENV_DATA = EnvHandler.SIM
+ENV_DATA = EnvHandler.SERIAL
 
 def generate_trajectory_process(
     stop_event: MpEvent,
@@ -54,7 +54,7 @@ def generate_trajectory_process(
             if target_pos.x is None: continue
             
             # Récupération des coordonnées actuelles du robot
-            robot_position = get_robot_pose(r)
+            robot_position = get_robot_pose(r, ProcessNames.TRAJECTORY_CALCULATOR, logger)
             
             current_time = time.time()
 
@@ -124,6 +124,7 @@ def rc_control_process(
               inertie_factor_translate=config.inertie_factor.translate,
               inertie_factor_rotate=config.inertie_factor.rotate)
     r = create_redis_client(config.redis)
+    #r.flushdb()
 
     target_handler = TargetHandler(sim_handler=TargetSimHandler(sim=sim, global_target_point=global_target_point, lock=target_pos_lock), redis_handler=TargetRedisHandler(redis_db=r))
     use_target_handler = ENV_DATA.value.use_target_handler(target_handler)
@@ -131,7 +132,7 @@ def rc_control_process(
     robot_pos_handler = RobotPosHandler(sim_handler=RobotPosSimHandler(redis_db=r), redis_handler=RobotPosRedisHandler(redis_db=r))
     use_robot_pos_handler = ENV_DATA.value.use_robot_pos_handler(robot_pos_handler)
 
-    control_data = ControlHandler(sim_handler=ControlSimHandler(sim=sim, redis_db=r), serial_handler=ControlSerialHandler(config=config.serial), i2c_handler=ControlI2CHandler())
+    control_data = ControlHandler(sim_handler=ControlSimHandler(sim=sim, redis_db=r), serial_handler=ControlSerialHandler(config=config.serial), i2c_handler=ControlI2CHandler(), bluetooth_handler=ControlBluetoothHandler(bluetooth_manager=BluetoothManager(config=config)))
     use_control_data = ENV_DATA.value.use_control_handler(control_data)
     
     # Copie des listes partagées d'instruction vers des listes locales
@@ -225,13 +226,16 @@ if __name__ == "__main__":
 
     logger.log("Lancement des processus...", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
 
+    # Création en lancement du processus pour envoyer les instructions au robot
+    rc_controle_process_object = mp.Process(target=rc_control_process,
+                                            args=(stop_event, exit_code, logger, global_target_point, target_pos_lock,
+                                                  forward_command_buffer, rotate_command_buffer, command_buffers_lock),
+                                            daemon=True)
+    rc_controle_process_object.start()
+
     # Création et lancement du processus pour générer la chaine d'instruction
     generate_trajectory_process_object = mp.Process(target=generate_trajectory_process, args=(stop_event, exit_code, logger, global_target_point, target_pos_lock, forward_command_buffer, rotate_command_buffer, command_buffers_lock), daemon=True)
     generate_trajectory_process_object.start()
-    
-    # Création en lancement du processus pour envoyer les instructions au robot
-    rc_controle_process_object = mp.Process(target=rc_control_process, args=(stop_event, exit_code, logger, global_target_point, target_pos_lock, forward_command_buffer, rotate_command_buffer, command_buffers_lock), daemon=True)
-    rc_controle_process_object.start()
 
     logger.log("Processus lancés !...", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
 

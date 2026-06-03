@@ -131,6 +131,8 @@ def generate_trajectory(
     translate_command_buffer: CommandBuffer = []
     rotate_command_buffer: CommandBuffer = []
 
+    logger.log(f"Robot x: {robot_position.x}, y: {robot_position.y}, direction: {robot_position.direction}", ProcessNames.TRAJECTORY_CALCULATOR, LoggingLevel.DEBUG)
+
     prev_x, prev_y = prev_pos.x, prev_pos.y
     (
         target_distance,
@@ -177,7 +179,7 @@ def generate_trajectory(
     #logger.log(str(inertie_to_target_delta), process=process_name, level=LoggingLevel.DEBUG)
 
     # Ajout de la commande d'avance si l'inertie le permet
-    if inertie_to_target_delta >= 30 and target_distance >= 5:
+    if (inertie_to_target_delta >= 30 or True) and target_distance >= 5:
         forward_command_buffer.append(CommandBufferItem(finish_time=current_time_forward, command=forward_speed_command))
 
     # Fin de rotation

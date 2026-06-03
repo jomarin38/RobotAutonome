@@ -14,6 +14,11 @@ class SerialConfig(BaseModel):
     timeout: float
 
 
+class BluetoothConfig(BaseModel):
+    adress: str
+    char_uuid: str
+
+
 class SimWindowConfig(BaseModel):
     width: int
     height: int
@@ -58,6 +63,7 @@ class OthersConfig(BaseModel):
 class Config(BaseModel):
     redis: RedisConfig
     serial: SerialConfig
+    bluetooth: BluetoothConfig
     sim: SimConfig
     movement_coeff: MovementCoeffConfig
     inertie_factor: InertieFactorConfig

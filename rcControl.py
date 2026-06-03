@@ -5,7 +5,7 @@ def rc_control(
     process_name: ProcessNames,
     commands_buffer: AllCommandBuffers,
     initial_time: float,
-    use_control_data: ControlSimHandler
+    use_control_data: ControlHandlerBase
 ) -> bool:
     """Applique les commandes (forward / rotate / translate) au robot.
 
