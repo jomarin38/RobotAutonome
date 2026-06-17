@@ -1,42 +1,62 @@
 from utils import *
 
+
 def rc_control(
     logger: LoggerAPI,
     process_name: ProcessNames,
-    commands_buffer: AllCommandBuffers,
-    initial_time: float,
-    use_control_data: ControlHandlerBase
+    command_buffers: AllCommandBuffers,
+    buffer_start_time: float,
+    use_control_handler: ControlSimHandler,
 ) -> bool:
-    """Applique les commandes (forward / rotate / translate) au robot.
+    """Applique la commande courante de chaque axe au robot.
 
-    - Les commandes sont encodées sous forme de buffers temporels: chaque élément est
-      un dict avec au minimum `time` (float) et `value` (consigne).
-    - Si `sim` est fourni, on agit sur le simulateur et on publie la pose dans Redis.
+    Lit la consigne active dans chaque buffer (forward / translate / rotate) selon
+    l'horodatage, puis envoie la commande résultante via le handler de contrôle.
+
+    None sur un axe = buffer vide, l'inertie s'applique naturellement.
     """
-
-    translate = 0
     current_time = time.time()
 
-    forward = get_buffer(logger, process_name, commands_buffer.forward, current_time, initial_time) if len(commands_buffer.forward) > 0 else 0.0
-    rotate_command = get_buffer(logger, process_name, commands_buffer.rotate, current_time, initial_time) if len(commands_buffer.rotate) > 0 else 0.0
+    # None si le buffer est vide : aucune consigne, l'inertie décroît librement
+    forward_command = (
+        get_active_command(logger, process_name, command_buffers.forward, current_time, buffer_start_time)
+        if len(command_buffers.forward) > 0 else None
+    )
+    translate_command = (
+        get_active_command(logger, process_name, command_buffers.translate, current_time, buffer_start_time)
+        if len(command_buffers.translate) > 0 else None
+    )
+    rotate_command = (
+        get_active_command(logger, process_name, command_buffers.rotate, current_time, buffer_start_time)
+        if len(command_buffers.rotate) > 0 else None
+    )
 
-    running = send_command(use_control_data, Command(rotate=-rotate_command, forward=forward, translate=translate))
+    running = send_command(
+        use_control_handler,
+        Command(
+            rotate=-rotate_command if rotate_command is not None else None,
+            forward=forward_command,
+            translate=translate_command,
+        ),
+    )
     return running
 
-def get_buffer(
+
+def get_active_command(
     logger: LoggerAPI,
     process_name: ProcessNames,
-    command_buffer: CommandBuffer,
+    buffer: CommandBuffer,
     current_time: float,
-    initial_time: float,
+    buffer_start_time: float,
 ) -> float:
-    """Retourne la consigne courante pour un buffer temporel.
+    """Retourne la consigne courante depuis un buffer temporel.
 
-    Logique inchangée: on consomme (`pop(0)`) les items dont le temps est dépassé.
+    Consomme (pop) les items dont le temps de fin est dépassé, puis retourne
+    la valeur du premier item encore actif. Retourne 0 si le buffer est vide.
     """
-    if len(command_buffer) == 0:
-        return 0
-    if current_time <= initial_time + command_buffer[0].finish_time:
-        return command_buffer[0].command
-    command_buffer.pop(0)
-    return get_buffer(logger, process_name, command_buffer, current_time, initial_time)
+    if len(buffer) == 0:
+        return 0.0
+    if current_time <= buffer_start_time + buffer[0].finish_time:
+        return buffer[0].command
+    buffer.pop(0)
+    return get_active_command(logger, process_name, buffer, current_time, buffer_start_time)

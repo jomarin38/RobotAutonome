@@ -1,190 +1,218 @@
 from numba import njit  # type: ignore[import-untyped]
 from utils import *
-from math import sqrt, atan2, pi, sin, cos, log, ceil
+from math import log, ceil
 
 debug = False
-delay = 0
 
-# Vitesse de consigne pour les mouvements
-forward_speed_command = 100
-rotate_speed_command = 100
+# Vitesses de consigne maximales pour chaque axe (en unités simulateur)
+MAX_FORWARD_SPEED: float = 100.0
+MAX_TRANSLATE_SPEED: float = 100.0
+MAX_ROTATE_SPEED: float = 100.0
 
-prev_time = time.time()
+
+@njit()
+def compute_inertia_coast_delta(
+    previous_pos: float,
+    current_pos: float,
+    elapsed_time: float,
+    inertia_factor: float,
+    tick_interval: float,
+    target_position: float,
+) -> float:
+    """Calcule le delta signé entre la position d'arrêt prédite par inertie et la cible.
+
+    Retourne une valeur :
+    - Positive  → le robot doit encore pousser (l'inertie ne suffit pas à atteindre la cible).
+    - Zéro      → l'inertie arrêtera le robot exactement sur la cible.
+    - Négative  → l'inertie dépasse la cible, arrêter de pousser.
+
+    Formule de la distance totale de glissement (série géométrique) :
+        coast_distance = measured_speed * tick_interval / (1 - inertia_factor)
+    """
+    # Pas de mouvement mesurable : robot considéré à l'arrêt
+    if previous_pos == current_pos or elapsed_time <= 0.0:
+        return abs(target_position - current_pos)
+
+    measured_speed = (current_pos - previous_pos) / elapsed_time  # px/s, signé
+
+    # Vitesse négligeable : pas de dérive significative
+    if abs(measured_speed) < 1e-4:
+        return abs(target_position - current_pos)
+
+    # Facteur d'inertie hors domaine valide : pas de prédiction possible
+    if inertia_factor <= 0.0 or inertia_factor >= 1.0:
+        return abs(target_position - current_pos)
+
+    coast_distance = measured_speed * tick_interval / (1.0 - inertia_factor)
+    predicted_stop_pos = current_pos + coast_distance
+
+    # Positif = encore besoin de poussée, négatif = dépassement prédit
+    direction_sign = 1.0 if target_position > current_pos else -1.0
+    return (target_position - predicted_stop_pos) * direction_sign
 
 
 @njit(cache=True)
 def compute_trajectory_core(
+    tick_interval: float,
     x_target: float,
     y_target: float,
     prev_x: float,
     prev_y: float,
-    inertie_coeff: float,
-    delta_time: float,
-    x_position: float,
-    y_position: float,
-    current_direction_deg: float,
-    rotate_coeff: float,
-    forward_coeff: float,
-) -> tuple[float, float, float, float, float, float, float, list[Optional[float]]]:
-    """Noyau de calcul compilé (numba) pour `generate_trajectory`.
+    inertia_factor_fwd: float,
+    inertia_factor_tra: float,
+    elapsed_time: float,
+    x_pos: float,
+    y_pos: float,
+    forward_scale: float,
+    translate_scale: float,
+) -> tuple[float, float, float, float, float, float, float, float, float, float, list]:
+    """Noyau de calcul Numba (JIT) pour generate_trajectory.
 
-    Regroupe plusieurs petits calculs pour réduire l'overhead d'appel et laisser
-    numba optimiser un bloc plus gros.
+    Calcule les vitesses, durées et deltas d'inertie pour les axes forward et translate.
 
-    Retour:
-    - target_distance
-    - target_direction (radians)
-    - delta_angle (radians)
-    - current_time_direction
-    - current_time_throttle
-    - inertie_to_target_delta
-    - sens (signe de delta_angle, ou 0 si delta_angle ~ 0)
+    Retour (dans l'ordre) :
+        abs_dx, abs_dy           : distances absolues à la cible
+        forward_duration         : durée du buffer forward (s)
+        translate_duration       : durée du buffer translate (s)
+        forward_command_speed    : vitesse de consigne forward
+        translate_command_speed  : vitesse de consigne translate
+        x_coast_delta            : delta inertie signé sur l'axe X
+        y_coast_delta            : delta inertie signé sur l'axe Y
+        x_dir                    : signe de la direction vers la cible en X (+1 / -1)
+        y_dir                    : signe de la direction vers la cible en Y (+1 / -1)
+        logs                     : liste de messages de debug (None = pas de message)
     """
+    logs: list[Optional[Any]] = [None]
 
-    logs: list[Optional[float]] = [None]
+    dx = x_target - x_pos   # positif si cible à droite
+    dy = y_pos - y_target    # positif si cible en haut (y écran inversé)
 
-    # 1) Target distance + direction
-    dx = x_target - x_position
-    dy = y_target - y_position
-    target_distance = sqrt(dx * dx + dy * dy)
-    target_direction = atan2(dy, dx)
+    # Vitesse proportionnelle à la distance pour éviter le dépassement au dernier tick
+    translate_command_speed = min(MAX_TRANSLATE_SPEED, abs(dx) * translate_scale / tick_interval)
+    translate_duration = abs(dx) / translate_command_speed * translate_scale
 
-    # 2) Delta angle (alignement vers la cible)
-    delta_angle = target_direction - current_direction_deg * pi / 180.0
-    delta_angle = (delta_angle + pi) % (2 * pi) - pi
-    delta_angle = -delta_angle
+    forward_command_speed = min(MAX_FORWARD_SPEED, abs(dy) * forward_scale / tick_interval)
+    forward_duration = abs(dy) / forward_command_speed * forward_scale
 
-    # Signe (même logique que `calculate_sens`)
-    abs_delta_angle = abs(delta_angle)
-    sens = delta_angle / abs_delta_angle if abs_delta_angle > 1e-6 else 0.0
+    # Signe de direction vers la cible sur chaque axe
+    x_dir = dx / max(abs(dx), 1e-4)
+    y_dir = dy / max(abs(dy), 1e-4)
 
-    # 3) Durée de rotation
-    current_time_rotate = 0.0
-    if abs(delta_angle) > 0.034:
-        deg = abs(delta_angle) * 180.0 / pi
-        current_time_rotate += (deg * rotate_coeff / 100.0 if deg > 1.0 else 0.0)
-
-    #logs.append(current_time_rotate)
-
-    # 4) Durée d'avance
-    current_time_forward = current_time_rotate + (target_distance / 100.0 * forward_coeff)
-
-    # 5) Heuristique d'inertie : prédit la position future du robot pour compenser l'inertie
-    if (prev_x != x_position) or (prev_y != y_position):
-        actual_speed = sqrt((x_position - prev_x) ** 2 + (y_position - prev_y) ** 2) / delta_time
-
-        # Prédiction de la position avec inertie
-        if actual_speed <= 0.1:
-            inertie_dist_predicted = 0.0
-            inertie_pos_predicted_x = x_position
-            inertie_pos_predicted_y = y_position
-        else:
-            if inertie_coeff >= 1.0:
-                total_dist = actual_speed
-            else:
-                n = ceil(log(0.1 / actual_speed) / log(inertie_coeff))
-                total_dist = actual_speed * (inertie_coeff * (1.0 - inertie_coeff ** n) / (1.0 - inertie_coeff))
-
-            current_direction_rad = current_direction_deg * pi / 180.0
-            inertie_pos_predicted_x = x_position + total_dist * cos(current_direction_rad)
-            inertie_pos_predicted_y = y_position + total_dist * sin(current_direction_rad)
-            inertie_dist_predicted = total_dist
-
-        # Calcul de la distance corrigée tenant compte de l'inertie
-        sign_term = (target_distance - inertie_dist_predicted)
-        inertie_to_target_delta = sqrt(
-            (x_target - inertie_pos_predicted_x) ** 2 + (y_target - inertie_pos_predicted_y) ** 2
-        ) * sign_term / abs(sign_term) if abs(sign_term) > 0 else target_distance
-    else:
-        inertie_to_target_delta = target_distance
+    # Delta d'inertie : positif = encore besoin de pousser, négatif = déjà trop d'élan
+    x_coast_delta = compute_inertia_coast_delta(prev_x, x_pos, elapsed_time, inertia_factor_tra, tick_interval, x_target)
+    y_coast_delta = compute_inertia_coast_delta(prev_y, y_pos, elapsed_time, inertia_factor_fwd, tick_interval, y_target)
 
     return (
-        target_distance,
-        target_direction,
-        delta_angle,
-        current_time_rotate,
-        current_time_forward,
-        inertie_to_target_delta,
-        sens,
-        logs
+        abs(dx),
+        abs(dy),
+        forward_duration,
+        translate_duration,
+        forward_command_speed,
+        translate_command_speed,
+        x_coast_delta,
+        y_coast_delta,
+        x_dir,
+        y_dir,
+        logs,
     )
+
 
 def generate_trajectory(
     logger: LoggerAPI,
     process_name: ProcessNames,
-    target_pos: Position,
-    prev_pos: Position,
-    delta_time: float,
+    target_position: Position,
+    previous_position: Position,
+    elapsed_time: float,
     robot_position: Position,
-    config: Config
+    config: Config,
+    sim_points: list[SimPoint],
 ) -> AllCommandBuffers:
     """Génère les buffers de commandes pour atteindre la cible.
 
-    La logique est simple : une phase de rotation vers la cible, puis une phase d'avance.
-    Les temps sont relatifs (en secondes) et seront interprétés par le contrôleur.
+    Utilise l'heuristique d'inertie pour arrêter la poussée au bon moment afin
+    que le robot glisse jusqu'à la cible sans la dépasser.
     """
-    global prev_time
-    if debug:
-        logger.log(f"target: {target_pos.x} {target_pos.y}", process=process_name, level=LoggingLevel.DEBUG)
+    forward_buffer: CommandBuffer = []
+    translate_buffer: CommandBuffer = []
+    rotate_buffer: CommandBuffer = []
 
-    forward_command_buffer: CommandBuffer = []
-    translate_command_buffer: CommandBuffer = []
-    rotate_command_buffer: CommandBuffer = []
+    prev_x = previous_position.x
+    prev_y = previous_position.y
 
-    logger.log(f"Robot x: {robot_position.x}, y: {robot_position.y}, direction: {robot_position.direction}", ProcessNames.TRAJECTORY_CALCULATOR, LoggingLevel.DEBUG)
-
-    prev_x, prev_y = prev_pos.x, prev_pos.y
     (
-        target_distance,
-        target_direction,
-        delta_angle,
-        current_time_rotate,
-        current_time_forward,
-        inertie_to_target_delta,
-        sens,
-        logs
+        abs_dx,
+        abs_dy,
+        forward_duration,
+        translate_duration,
+        forward_command_speed,
+        translate_command_speed,
+        x_coast_delta,
+        y_coast_delta,
+        x_dir,
+        y_dir,
+        logs,
     ) = compute_trajectory_core(
-        float(target_pos.x),
-        float(target_pos.y),
+        float(config.others.rc_control_dt),
+        float(target_position.x),
+        float(target_position.y),
         float(prev_x),
         float(prev_y),
-        1 - float(config.inertie_factor.forward),
-        float(delta_time),
+        float(config.inertia_factor.forward),
+        float(config.inertia_factor.translate),
+        float(elapsed_time),
         float(robot_position.x),
         float(robot_position.y),
-        float(robot_position.direction),
-        float(config.movement_coeff.rotate),
         float(config.movement_coeff.forward),
+        float(config.movement_coeff.translate),
     )
 
-    """for log in logs:
-        if log is not None: logger.log(str(float(log)), process=process_name, level=LoggingLevel.DEBUG)"""
+    for log_entry in logs:
+        if log_entry is not None:
+            logger.log(log_entry, process=process_name, level=LoggingLevel.DEBUG)
+
+    # Point de debug : position d'arrêt prédite par l'inertie.
+    # predicted_x = target.x - x_dir * x_coast_delta  (car x_coast_delta = (target - predicted) * x_dir)
+    # predicted_y = target.y + y_dir * y_coast_delta
+    sim_points.append(SimPoint(
+        name="inertie_point",
+        position=Position(
+            x=target_position.x - x_dir * x_coast_delta,
+            y=target_position.y + y_dir * y_coast_delta,
+            direction=0,
+        ),
+        color=Color(red=0, green=255, blue=0),
+        radius=10,
+    ))
+
+    # Axe X : pousser tant que l'inertie ne suffit pas à atteindre la cible
+    if x_coast_delta > 0:
+        translate_buffer.append(CommandBufferItem(
+            finish_time=translate_duration,
+            command=translate_command_speed * x_dir,
+        ))
+
+    # Axe Y : même logique
+    if y_coast_delta > 0:
+        forward_buffer.append(CommandBufferItem(
+            finish_time=forward_duration,
+            command=forward_command_speed * y_dir,
+        ))
 
     if debug:
-        logger.log(f"""target_distance: {target_distance}
-                          target_direction: {target_direction * 180 / pi}
-                          target position: {target_pos.x, target_pos.y, target_pos.direction}
-                          actual position: {robot_position.x, robot_position.y, robot_position.direction}
-                          """, process=process_name, level=LoggingLevel.DEBUG)
-    
-    # Phase de rotation
-    if abs(delta_angle) > 0.034:
-        rotate_command_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=sens * rotate_speed_command))
-    else:
-        rotate_command_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
+        logger.log(
+            f"""target position : {target_position.x} {target_position.y}
+               distance X     : {abs_dx}
+               distance Y     : {abs_dy}
+               position robot : {robot_position.x, robot_position.y, robot_position.direction}
+               direction X    : {x_dir}
+               direction Y    : {y_dir}
+               delta inertie X: {x_coast_delta}
+               delta inertie Y: {y_coast_delta}
+               buffer forward : {forward_buffer}
+               buffer translate: {translate_buffer}
+               buffer rotate  : {rotate_buffer}""",
+            process=process_name,
+            level=LoggingLevel.DEBUG,
+        )
 
-    # Phase d'avance (initialement à 0)
-    forward_command_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
-
-    #logger.log(str(inertie_to_target_delta), process=process_name, level=LoggingLevel.DEBUG)
-
-    # Ajout de la commande d'avance si l'inertie le permet
-    if (inertie_to_target_delta >= 30 or True) and target_distance >= 5:
-        forward_command_buffer.append(CommandBufferItem(finish_time=current_time_forward, command=forward_speed_command))
-
-    # Fin de rotation
-    rotate_command_buffer.append(CommandBufferItem(finish_time=current_time_forward, command=0))
-
-    return AllCommandBuffers(forward=forward_command_buffer, translate=translate_command_buffer, rotate=rotate_command_buffer)
-
-
+    return AllCommandBuffers(forward=forward_buffer, translate=translate_buffer, rotate=rotate_buffer)

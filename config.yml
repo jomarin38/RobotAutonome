@@ -4,8 +4,8 @@ redis:
   db: 0
 
 serial:
-  port_name: "COM26"
-  baud_rate: 9600
+  port_name: "/dev/ttyUSB0"
+  baud_rate: 115200
   timeout: 0.2
 
 bluetooth:
@@ -17,24 +17,26 @@ sim:
   start_position:
     x: 500
     y: 400
-    direction: 0
+    direction: -90
   window:
     width: 1300
     height: 700
 
 movement_coeff:
-  forward: 0.38
-  translate: 1.0
-  rotate: 1.105
+  forward: 0.3
+  translate: 0.3
+  rotate: 0.3
 
-inertie_factor:
-  forward: 0.0 #0.9
-  translate: 0.0 # 0.9
-  rotate: 0.0 # 0.4
+inertia_factor:
+  forward: 0.2
+  translate: 0.2
+  rotate: 0.4
 
 utils:
   logger:
     log_freq: 0.5
 
 others:
-  prev_pos_buffer_len: 100
+  previous_position_buffer_len: 5
+  # Intervalle du contrôleur RC en secondes : doit correspondre au time.sleep dans rc_control_process
+  rc_control_dt: 0.01

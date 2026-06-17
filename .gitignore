@@ -1,6 +1,41 @@
+# Répertoires de contrôle de version
 .git/
-.idea/
+
+# Environnements virtuels
 .venv/
+venv/
+env/
+
+# Cache Python
 __pycache__/
-poetry.lock
-poetry.toml
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Outils de développement
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tests et couverture
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Gestionnaires de dépendances
+# UV (moderne)
+uv.lock
+# Poetry (hérité, si migration)
+# poetry.lock
+# poetry.toml

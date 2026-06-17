@@ -42,7 +42,7 @@ class MovementCoeffConfig(BaseModel):
     rotate: float = 1.0
 
 
-class InertieFactorConfig(BaseModel):
+class InertiaFactorConfig(BaseModel):
     forward: float = 0.0
     translate: float = 0.0
     rotate: float = 0.0
@@ -57,7 +57,9 @@ class UtilsConfig(BaseModel):
 
 
 class OthersConfig(BaseModel):
-    prev_pos_buffer_len: int
+    previous_position_buffer_len: int
+    # Intervalle entre deux ticks du contrôleur RC (doit correspondre au time.sleep dans rc_control_process)
+    rc_control_dt: float = 0.01
 
 
 class Config(BaseModel):
@@ -66,7 +68,7 @@ class Config(BaseModel):
     bluetooth: BluetoothConfig
     sim: SimConfig
     movement_coeff: MovementCoeffConfig
-    inertie_factor: InertieFactorConfig
+    inertia_factor: InertiaFactorConfig
     utils: UtilsConfig
     others: OthersConfig
 
