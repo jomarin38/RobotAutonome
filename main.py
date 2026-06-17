@@ -240,7 +240,7 @@ if __name__ == "__main__":
     stop_event = mp.Event()
 
     logger = LoggerAPI(log_freq=config.utils.logger.log_freq)
-    logger_process = logger.create_logger(stop_event, level=LoggingLevel.DEBUG)
+    logger_process = logger.create_logger(stop_event, LoggingLevel.DEBUG)
     logger_process.start()
 
     logger.log("Initialisation du manager et des variables partagées...", process=ProcessNames.MAIN, level=LoggingLevel.INFO)

@@ -117,9 +117,9 @@ class Sim:
             initial_position.x,
             initial_position.y,
             initial_position.direction,
-            forward_scale=self.forward_scale,
-            translate_scale=self.translate_scale,
-            rotate_scale=self.rotate_scale,
+            self.forward_scale,
+            self.translate_scale,
+            self.rotate_scale,
         )
         self.target_position = None
         self.running = True

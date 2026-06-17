@@ -343,7 +343,7 @@ class Logger(mp.Process):
             except BaseException as e:
                 # noinspection PyBroadException
                 try:
-                    print(self.logger_api.format_traceback(e, process=ProcessNames.LOGGER, level=LoggingLevel.ERROR), file=streams, flush=True)
+                    print(self.logger_api.format_traceback(e, ProcessNames.LOGGER, LoggingLevel.ERROR), file=streams, flush=True)
                 except KeyboardInterrupt:
                     if self.log_queue.empty(): pass
                     else:

@@ -1,6 +1,26 @@
 from utils import *
 
 
+def get_active_command(
+    logger: LoggerAPI,
+    process_name: ProcessNames,
+    buffer: CommandBuffer,
+    current_time: float,
+    buffer_start_time: float,
+) -> float:
+    """Retourne la consigne courante depuis un buffer temporel.
+
+    Consomme (pop) les items dont le temps de fin est dépassé, puis retourne
+    la valeur du premier item encore actif. Retourne 0 si le buffer est vide.
+    """
+    if len(buffer) == 0:
+        return 0.0
+    if current_time <= buffer_start_time + buffer[0].finish_time:
+        return buffer[0].command
+    buffer.pop(0)
+    return get_active_command(logger, process_name, buffer, current_time, buffer_start_time)
+
+
 def rc_control(
     logger: LoggerAPI,
     process_name: ProcessNames,
@@ -40,23 +60,3 @@ def rc_control(
         ),
     )
     return running
-
-
-def get_active_command(
-    logger: LoggerAPI,
-    process_name: ProcessNames,
-    buffer: CommandBuffer,
-    current_time: float,
-    buffer_start_time: float,
-) -> float:
-    """Retourne la consigne courante depuis un buffer temporel.
-
-    Consomme (pop) les items dont le temps de fin est dépassé, puis retourne
-    la valeur du premier item encore actif. Retourne 0 si le buffer est vide.
-    """
-    if len(buffer) == 0:
-        return 0.0
-    if current_time <= buffer_start_time + buffer[0].finish_time:
-        return buffer[0].command
-    buffer.pop(0)
-    return get_active_command(logger, process_name, buffer, current_time, buffer_start_time)
