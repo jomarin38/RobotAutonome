@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import traceback
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict, field, astuple
 from enum import Enum
 import multiprocessing as mp
@@ -16,7 +16,7 @@ from multiprocessing.managers import DictProxy, ListProxy
 from multiprocessing.synchronize import Event as MpEvent
 from multiprocessing.synchronize import Lock as MpLock
 from multiprocessing.queues import Queue as MpQueue
-from typing import Optional, Callable, TYPE_CHECKING, Any, TypedDict, TypeVar, cast, Protocol
+from typing import Optional, Callable, TYPE_CHECKING, Any, TypedDict, TypeVar, cast, Protocol, Literal
 
 import colorama
 from bleak import BleakClient
@@ -281,6 +281,96 @@ class BluetoothEnvHandler(DataClassUtils):
     use_target_handler: Callable[[TargetHandler], TargetRedisHandler]
     use_robot_position_handler: Callable[[RobotPosHandler], RobotPosRedisHandler]
     use_control_handler: Callable[[ControlHandler], ControlBluetoothHandler]
+
+
+class Driver(ABC):
+    def __init__(self, config: Config, logger: LoggerAPI, process_name: ProcessNames,
+                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
+        self.config = config
+        self.logger = logger
+        self.process_name = process_name
+        self.global_target_position = global_target_position
+        self.global_target_position_lock = global_target_position_lock
+
+        self.redis = StrictRedis(host=config.redis.host, port=config.redis.port, db=config.redis.db,
+                                 decode_responses=True)
+
+    def get_robot_position(self) -> Position:
+        """Récupère la position courante du robot depuis Redis."""
+        raw_x = cast(float, self.redis.get("robot_x"))
+        raw_y = cast(float, self.redis.get("robot_y"))
+        raw_direction = cast(float, self.redis.get("robot_direction"))
+
+        if raw_x is None or raw_y is None or raw_direction is None:
+            raise ValueError("Position ou direction absente de Redis")
+
+        return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
+
+    @abstractmethod
+    def get_target_position(self) -> Position: ...
+
+    @abstractmethod
+    def send_command(self, command: Command): ...
+
+
+class SimDriver(Driver):
+    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL],
+                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
+        super().__init__(config, logger, process_name, global_target_position, global_target_position_lock)
+
+        if process_name == ProcessNames.TRAJECTORY_CALCULATOR : self.sim = Sim(
+            window_size=(config.sim.window.width, config.sim.window.height),
+            tick_rate=config.sim.tick_rate,
+            forward_scale=config.movement_coeff.forward,
+            translate_scale=config.movement_coeff.translate,
+            rotate_scale=config.movement_coeff.rotate,
+            inertia_factor_forward=config.inertia_factor.forward,
+            inertia_factor_translate=config.inertia_factor.translate,
+            inertia_factor_rotate=config.inertia_factor.rotate,
+        )
+
+    def get_target_position(self) -> Position:
+        if self.process_name != ProcessNames.TRAJECTORY_CALCULATOR: raise RuntimeError(
+            "Driver::get_target_position doit uniquement être appeler dans le processus TRAJECTORY_CALCULATOR.")
+
+        with self.global_target_position_lock:
+            return Position(**copy.deepcopy(dict(self.global_target_position)))
+
+    def send_command(self, command: Command) -> bool:
+        if self.process_name != ProcessNames.RC_CONTROL: raise RuntimeError(
+            "Driver::send_command doit uniquement être appeler dans le processus RC_CONTROL.")
+
+        running, obs = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
+        self.redis.set('robot_x', obs.robot_position.x)
+        self.redis.set('robot_y', obs.robot_position.y)
+        self.redis.set('robot_direction', obs.robot_position.direction)
+        return running
+
+
+class SerialDriver(Driver):
+    def __init__(self, config: Config, logger: LoggerAPI,
+                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL],
+                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
+        super().__init__(config, logger, process_name, global_target_position, global_target_position_lock)
+
+        # noinspection PyCallingNonCallable
+        logger.log("Initializing serial bus...", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
+        self.serial_bus = Serial(port=config.serial.port_name, baudrate=config.serial.baud_rate, parity=serial.PARITY_NONE,
+                            stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=config.serial.timeout)
+        # noinspection PyCallingNonCallable
+        logger.log("Serial bus initialized !", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
+
+    def get_target_position(self) -> Position:
+        if self.process_name != ProcessNames.TRAJECTORY_CALCULATOR : raise RuntimeError("Driver::get_target_position doit uniquement être appeler dans le processus TRAJECTORY_CALCULATOR.")
+
+        x = self.redis.get("target_x")
+        y = self.redis.get("target_y")
+        direction = self.redis.get("target_direction")
+        return Position(x=x, y=y, direction=direction)
+
+    def send_command(self, command: Command):
+        if self.process_name != ProcessNames.RC_CONTROL : raise RuntimeError("Driver::send_command doit uniquement être appeler dans le processus RC_CONTROL.")
+        self.serial_bus.write(f"{command.forward} {command.rotate} {command.translate}\n".encode())
 
 
 class EnvHandler(Enum):
