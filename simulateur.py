@@ -141,9 +141,12 @@ class Sim:
     def target_position(self, position: Optional[Position]) -> None:
         self._target_position = position
 
-    def set_sim_point(self, sim_point: SimPoint) -> None:
+    def add_sim_point(self, sim_point: SimPoint) -> None:
         """Enregistre ou met à jour un point de debug affiché dans la fenêtre."""
         self.sim_points[sim_point.name] = sim_point
+
+    def add_all_sim_points(self, sim_points: list[SimPoint]) -> None:
+        update = self.sim_points.update({sp.name: sp for sp in sim_points})
 
     def remove_sim_point(self, name: str) -> bool:
         """Supprime un point de debug par son nom. Retourne True si trouvé."""
@@ -213,6 +216,11 @@ class Sim:
         self.forward_speed = self.forward_speed * self.inertia_factor_forward + cmd_forward * (1.0 - self.inertia_factor_forward)
         self.translate_speed = self.translate_speed * self.inertia_factor_translate + cmd_translate * (1.0 - self.inertia_factor_translate)
 
+        if self.redis is not None:
+            self.redis.set('robot_x', self.robot.x)
+            self.redis.set('robot_y', self.robot.y)
+            self.redis.set('robot_direction', self.robot.angle)
+
         return result, self.get_observation()
 
     def _move(self, rotate: float = 0.0, forward: float = 0.0, translate: float = 0.0) -> None:
@@ -245,9 +253,9 @@ class Sim:
                 if event.button == 1:  # clic gauche → définit la cible
                     self.target_position = Position(x=event.pos[0], y=event.pos[1], direction=0)
                     if self.redis:
-                        self.redis.set('robot_x', self.target_position.x)
-                        self.redis.set('robot_y', self.target_position.y)
-                        self.redis.set('robot_direction', self.target_position.direction)
+                        self.redis.set('target_x', self.target_position.x)
+                        self.redis.set('target_y', self.target_position.y)
+                        self.redis.set('target_direction', self.target_position.direction)
 
         # Fond blanc
         self.window.fill((255, 255, 255))

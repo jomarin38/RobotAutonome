@@ -51,7 +51,8 @@ def generate_trajectory_process(
             sim_points: list[SimPoint] = []
 
             target_position = control_driver.get_target_position()
-            if control_driver.as_target() is None:
+            logger.log(repr(target_position), ProcessNames.RC_CONTROL, LoggingLevel.DEBUG)
+            if not control_driver.as_target():
                 continue
 
             robot_position = control_driver.get_robot_position()
@@ -138,21 +139,14 @@ def rc_control_process(
 
     # noinspection PyBroadException
     try:
-        running, initial_observation = sim.reset(
-            Position(
-                x=config.sim.start_position.x,
-                y=config.sim.start_position.y,
-                direction=config.sim.start_position.direction,
-            )
-        )
+        running = control_driver.send_command(Command(0, 0, 0))
         while not stop_event.is_set():
             time.sleep(0.01)  # tick RC à ~100 Hz
 
             with shared_sim_points_lock:
                 sim_points = copy.deepcopy(list(shared_sim_points))
 
-            for sim_point in sim_points:
-                sim.set_sim_point(sim_point)
+            control_driver.add_all_sim_points(sim_points)
 
             if not running:
                 terminate()
@@ -160,7 +154,7 @@ def rc_control_process(
 
             if not control_driver.as_target():
                 # Pas de cible : arrêt progressif via l'inertie
-                running, _ = control_driver.send_command(Command(0, 0, 0))
+                running = control_driver.send_command(Command(0, 0, 0))
                 continue
 
             with command_buffers_lock:

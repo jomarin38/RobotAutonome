@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import socket
+import subprocess
 import sys
 import threading
 import time
@@ -80,9 +82,7 @@ class ProcessNames(str, Enum):
 class DataclassInstance(Protocol):
     __dataclass_fields__: dict
 
-T = TypeVar("T", bound=DataclassInstance)
-
-class DataClassUtils(ABC):
+class DataClassUtils[T, DataclassInstance](ABC):
     """Classe de base utilitaire pour les dataclasses avec méthode copy."""
     def copy(self, use_deepcopy: bool=True) -> DataClassUtils:
         return copy.deepcopy(self) if use_deepcopy else copy.copy(self)
@@ -170,119 +170,6 @@ class AllCommandBuffers(DataClassUtils):
     rotate: CommandBuffer
 
 
-# ============================================================================
-# DATACLASSES - HANDLERS CIBLE
-# ============================================================================
-
-@dataclass(frozen=True)
-class TargetSimHandler(DataClassUtils):
-    """Handler de cible pour le mode simulation."""
-    global_target_position: DictProxy[str, Optional[float]]
-    lock: MpLock
-    sim: Optional[Sim] = field(default=None)
-
-
-@dataclass(frozen=True)
-class TargetRedisHandler(DataClassUtils):
-    """Handler de cible pour le mode Redis."""
-    redis_db: Redis
-
-
-@dataclass(frozen=True)
-class TargetHandler(DataClassUtils):
-    """Handler de cible polymorphique (sim ou redis)."""
-    sim_handler: Optional[TargetSimHandler] = field(default=None)
-    redis_handler: Optional[TargetRedisHandler] = field(default=None)
-
-
-@dataclass(frozen=True)
-class RobotPosSimHandler(DataClassUtils):
-    """Handler de position robot pour le mode simulation."""
-    redis_db: Redis
-
-
-@dataclass(frozen=True)
-class RobotPosRedisHandler(DataClassUtils):
-    """Handler de position robot pour le mode Redis."""
-    redis_db: Redis
-
-
-@dataclass(frozen=True)
-class RobotPosHandler(DataClassUtils):
-    """Handler de position robot polymorphique (sim ou redis)."""
-    sim_handler: Optional[RobotPosSimHandler] = field(default=None)
-    redis_handler: Optional[RobotPosRedisHandler] = field(default=None)
-
-
-class ControlHandlerBase:
-    ...
-
-
-@dataclass(frozen=True)
-class ControlSimHandler(DataClassUtils, ControlHandlerBase):
-    """Handler de contrôle pour le mode simulation."""
-    sim: Sim
-    redis_db: Redis
-
-
-@dataclass(frozen=True)
-class ControlSerialHandler(DataClassUtils, ControlHandlerBase):
-    """Handler de contrôle pour le mode série."""
-    config: SerialConfig
-
-
-@dataclass(frozen=True)
-class ControlI2CHandler(DataClassUtils, ControlHandlerBase):
-    """Handler de contrôle pour le mode I2C (non implémenté)."""
-    ...
-
-
-@dataclass(frozen=True)
-class ControlBluetoothHandler(DataClassUtils, ControlHandlerBase):
-    bluetooth_manager: BluetoothManager
-
-
-@dataclass(frozen=True)
-class ControlHandler(DataClassUtils):
-    """Handler de contrôle polymorphique (sim, serial ou i2c)."""
-    sim_handler: ControlSimHandler
-    serial_handler: ControlSerialHandler
-    i2c_handler: ControlI2CHandler
-    bluetooth_handler: ControlBluetoothHandler
-
-
-@dataclass(frozen=True)
-class SimEnvHandler(DataClassUtils):
-    """Configuration environnement simulation."""
-    use_target_handler: Callable[[TargetHandler], TargetSimHandler]
-    use_robot_position_handler: Callable[[RobotPosHandler], RobotPosSimHandler]
-    use_control_handler: Callable[[ControlHandler], ControlSimHandler]
-
-
-@dataclass(frozen=True)
-class SerialEnvHandler(DataClassUtils):
-    """Configuration environnement série."""
-    use_target_handler: Callable[[TargetHandler], TargetRedisHandler]
-    use_robot_position_handler: Callable[[RobotPosHandler], RobotPosRedisHandler]
-    use_control_handler: Callable[[ControlHandler], ControlSerialHandler]
-
-
-@dataclass(frozen=True)
-class I2CEnvHandler(DataClassUtils):
-    """Configuration environnement I2C."""
-    use_target_handler: Callable[[TargetHandler], TargetRedisHandler]
-    use_robot_position_handler: Callable[[RobotPosHandler], RobotPosRedisHandler]
-    use_control_handler: Callable[[ControlHandler], ControlI2CHandler]
-
-
-@dataclass(frozen=True)
-class BluetoothEnvHandler(DataClassUtils):
-    """Configuration environnement bluetooth."""
-    use_target_handler: Callable[[TargetHandler], TargetRedisHandler]
-    use_robot_position_handler: Callable[[RobotPosHandler], RobotPosRedisHandler]
-    use_control_handler: Callable[[ControlHandler], ControlBluetoothHandler]
-
-
 class Driver(ABC):
     def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         self.config = config
@@ -292,15 +179,19 @@ class Driver(ABC):
         self.redis = StrictRedis(host=config.redis.host, port=config.redis.port, db=config.redis.db,
                                  decode_responses=True)
 
-        if process_name == ProcessNames.RC_CONTROL : self.send_command = self._send_command
-        if process_name == ProcessNames.TRAJECTORY_CALCULATOR:
-            self.get_robot_position = self._get_robot_position
-            self.get_target_position = self._get_target_position
+        match process_name:
+            case ProcessNames.RC_CONTROL:
+                self.send_command = self._send_command
+                self.add_sim_point = self._add_sim_point
+                self.add_all_sim_points = self._add_all_sim_points
+            case ProcessNames.TRAJECTORY_CALCULATOR:
+                self.get_robot_position = self._get_robot_position
+                self.get_target_position = self._get_target_position
 
     def _get_target_position(self) -> Position:
-        x = self.redis.get("target_x")
-        y = self.redis.get("target_y")
-        direction = self.redis.get("target_direction")
+        x = float(self.redis.get("target_x")) if self.redis.get("target_x") is not None else None
+        y = float(self.redis.get("target_y")) if self.redis.get("target_y") is not None else None
+        direction = float(self.redis.get("target_direction")) if self.redis.get("target_direction") is not None else None
         return Position(x=x, y=y, direction=direction)
 
     @abstractmethod
@@ -318,40 +209,61 @@ class Driver(ABC):
         return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
 
     def stop(self):
+        self.redis.flushdb()
         self.redis.close()
 
     def as_target(self):
-        return self.get_target_position().x is not None
+        return self._get_target_position().x is not None
+
+    def _add_sim_point(self, point: SimPoint) -> None: ...
+
+    def _add_all_sim_points(self, points: list[SimPoint]) -> None: ...
 
 
 class SimDriver(Driver):
     def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         super().__init__(config, logger, process_name)
 
-        if process_name == ProcessNames.RC_CONTROL: self.sim = Sim(
-            window_size=(config.sim.window.width, config.sim.window.height),
-            tick_rate=config.sim.tick_rate,
-            forward_scale=config.movement_coeff.forward,
-            translate_scale=config.movement_coeff.translate,
-            rotate_scale=config.movement_coeff.rotate,
-            inertia_factor_forward=config.inertia_factor.forward,
-            inertia_factor_translate=config.inertia_factor.translate,
-            inertia_factor_rotate=config.inertia_factor.rotate,
-            redis=self.redis
-        )
+        from simulateur import Sim
+
+        if process_name == ProcessNames.RC_CONTROL:
+            self.sim = Sim(
+                window_size=(config.sim.window.width, config.sim.window.height),
+                tick_rate=config.sim.tick_rate,
+                forward_scale=config.movement_coeff.forward,
+                translate_scale=config.movement_coeff.translate,
+                rotate_scale=config.movement_coeff.rotate,
+                inertia_factor_forward=config.inertia_factor.forward,
+                inertia_factor_translate=config.inertia_factor.translate,
+                inertia_factor_rotate=config.inertia_factor.rotate,
+                redis=self.redis
+            )
+            self.sim.reset(
+                Position(
+                    x=config.sim.start_position.x,
+                    y=config.sim.start_position.y,
+                    direction=config.sim.start_position.direction,
+                )
+            )
 
     @override
     def _send_command(self, command: Command) -> bool:
-        running, obs = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
-        self.redis.set('robot_x', obs.robot_position.x)
-        self.redis.set('robot_y', obs.robot_position.y)
-        self.redis.set('robot_direction', obs.robot_position.direction)
+        running, _ = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
         return running
 
     @override
     def stop(self):
         super().stop()
         if self.process_name == ProcessNames.RC_CONTROL: self.sim.close()
+
+    @override
+    def _add_sim_point(self, point: SimPoint) -> None:
+        self.sim.add_sim_point(point)
+
+    @override
+    def _add_all_sim_points(self, points: list[SimPoint]) -> None:
+        for point in points:
+            self.sim.add_sim_point(point)
 
 
 class SerialDriver(Driver):
@@ -416,16 +328,6 @@ class WifiDriver(Driver):
     @override
     def _send_command(self, command: Command) -> bool:
         raise NotImplementedError("WifiDriver::_send_command is not implemented yet")
-
-
-class EnvHandler(Enum):
-    """Énumération des environnements disponibles."""
-    SIM = SimEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "sim_handler"), use_robot_position_handler=lambda robot_position_handler: getattr(robot_position_handler, "sim_handler"), use_control_handler=lambda control_data: getattr(control_data, "sim_handler"))
-    SERIAL = SerialEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"), use_robot_position_handler=lambda robot_position_handler: getattr(robot_position_handler, "redis_handler"), use_control_handler=lambda control_data: getattr(control_data, "serial_handler"))
-    I2C = I2CEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"), use_robot_position_handler=lambda robot_position_handler: getattr(robot_position_handler, "redis_handler"), use_control_handler=lambda control_data: getattr(control_data, "bluetooth_handler"))
-    BLUETOOTH = BluetoothEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"),
-                        use_robot_position_handler=lambda robot_position_handler: getattr(robot_position_handler, "redis_handler"),
-                        use_control_handler=lambda control_data: getattr(control_data, "bluetooth_handler"))
 
 
 class ControlDrivers(Enum):
@@ -554,140 +456,6 @@ class LoggerAPI:
     def _(self, e: BaseException, process: ProcessNames, level: LoggingLevel=LoggingLevel.INFO, _use_pprint: Optional[Any] = None, force: bool = False) -> bool:
         return self._log(self.format_traceback(e, process, level=level), level=level, force=force)
 
-
-# ============================================================================
-# LOGGING
-# ============================================================================
-
-class BluetoothManager:
-    def __init__(self, config: Config):
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
-        self._config = config
-
-    async def _send(self, command: Command):
-        async with BleakClient(self._config.bluetooth.adress) as client:
-            await client.write_gatt_char(self._config.bluetooth.char_uuid, f"{command.forward};{command.translate};{command.rotate}".encode())
-
-    def send(self, command: Command):
-        asyncio.run_coroutine_threadsafe(self._send(command), self._loop)
-
-
-# ============================================================================
-# GESTION DES CIBLES (GET/SET)
-# ============================================================================
-
-@singledispatch
-def get_target(data) -> Position:
-    raise NotImplementedError(f"No handler for type {type(data).__name__}")
-
-@singledispatch
-def set_target(data) -> Position:
-    raise NotImplementedError(f"No handler for type {type(data)}")
-
-@get_target.register(TargetSimHandler)
-def _(sim_handler: TargetSimHandler) -> Position:
-    with sim_handler.lock:
-        return Position(**copy.deepcopy(dict(sim_handler.global_target_position)))
-
-@set_target.register(TargetSimHandler)
-def _(sim_handler: TargetSimHandler) -> Optional[Position]:
-    target = sim_handler.sim.target_position or None
-    with sim_handler.lock:
-        sim_handler.global_target_position.clear()
-        if target is not None: sim_handler.global_target_position.update(asdict(target))
-        else: sim_handler.global_target_position.update({"x": None, "y": None, "direction": None})
-    return target
-
-@get_target.register(TargetRedisHandler)
-def _(redis_handler: TargetRedisHandler) -> Position:
-    redis_db = redis_handler.redis_db
-    x = redis_db.get("target_x")
-    y = redis_db.get("target_y")
-    direction = redis_db.get("target_direction")
-    return Position(x=x, y=y, direction=direction)
-
-@set_target.register(TargetRedisHandler)
-def _(redis_handler: TargetRedisHandler) -> Optional[Position]:
-    return get_target(redis_handler)
-
-
-# ============================================================================
-# REDIS - CLIENT ET POSITION ROBOT
-# ============================================================================
-
-def create_redis_client(cfg: RedisConfig) -> Redis:
-    """Crée et retourne un client Redis."""
-    return StrictRedis(host=cfg.host, port=cfg.port, db=cfg.db, decode_responses=True)
-
-def get_robot_pose(redis: Redis) -> Position:
-    """Récupère la position courante du robot depuis Redis."""
-    raw_x = cast(float, redis.get("robot_x"))
-    raw_y = cast(float, redis.get("robot_y"))
-    raw_direction = cast(float, redis.get("robot_direction"))
-
-    if raw_x is None or raw_y is None or raw_direction is None:
-        raise ValueError("Position ou direction absente de Redis")
-
-    return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
-
-@singledispatch
-def set_robot_pose(data, _robot_position: Position) -> None:
-    raise NotImplementedError(f"No handler for type {type(data).__name__}")
-
-@set_robot_pose.register(RobotPosSimHandler)
-def _(redis_handler: RobotPosSimHandler, robot_position: Position) -> None:
-    redis_handler.redis_db.set('robot_x', robot_position.x)
-    redis_handler.redis_db.set('robot_y', robot_position.y)
-    redis_handler.redis_db.set('robot_direction', robot_position.direction)
-
-@set_robot_pose.register(RobotPosRedisHandler)
-def _(_redis_handler: RobotPosRedisHandler, _robot_position: Position) -> None:
-    pass
-
-
-# ============================================================================
-# ENVOI DE COMMANDES (SIMULATION / SÉRIE / I2C)
-# ============================================================================
-
-@singledispatch
-def send_command(data, _command: Command) -> bool:
-    raise NotImplementedError(f"No handler for type {type(data).__name__}")
-
-@send_command.register(ControlSimHandler)
-def _(sim_handler: ControlSimHandler, command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
-    """Envoie une commande au simulateur."""
-    running, obs = sim_handler.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
-    sim_handler.redis_db.set('robot_x', obs.robot_position.x)
-    sim_handler.redis_db.set('robot_y', obs.robot_position.y)
-    sim_handler.redis_db.set('robot_direction', obs.robot_position.direction)
-    return running
-
-@send_command.register(ControlSerialHandler)
-def _(serial_handler: ControlSerialHandler, command: Command, logger_or_none: Optional[LoggerAPI] = None) -> bool:
-    """Envoie une commande via le port série."""
-    global serial_bus
-    logger = logger_or_none or type("NotLoggerAPI", (LoggerAPI,), {"log": lambda msg, process_name, logging_level: None})()
-    config = serial_handler.config
-    if serial_bus is None:
-        # noinspection PyCallingNonCallable
-        logger.log("Initializing serial bus...", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
-        serial_bus = Serial(port=config.port_name, baudrate=config.baud_rate, parity=serial.PARITY_NONE,
-                      stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=config.timeout)
-        # noinspection PyCallingNonCallable
-        logger.log("Serial bus initialized !", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
-
-    serial_bus.write(f"{command.forward} {command.rotate} {command.translate}\n".encode())
-    return True
-
-@send_command.register(ControlI2CHandler)
-def _(_i2c_handler: ControlI2CHandler, _command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
-    raise NotImplementedError("I2C control not implemented yet")
-
-@send_command.register(ControlBluetoothHandler)
-def _(bluetooth_handler: ControlBluetoothHandler, command: Command, _logger_or_none: Optional[LoggerAPI] = None) -> bool:
-    bluetooth_handler.bluetooth_manager.send(command)
-    return True
 
 # ============================================================================
 # TYPES ALIAS
