@@ -2,6 +2,7 @@ from collections import deque
 from multiprocessing.managers import ListProxy, DictProxy, ValueProxy  # type: ignore
 from multiprocessing.synchronize import Lock as MpLock
 from pathlib import Path
+from loguru import logger
 
 from .rcControl import rc_control
 from .trajectoryCalculator import generate_trajectory
@@ -10,11 +11,40 @@ from .utils import *
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
 
+logger.remove()
+logger.configure(patcher=bind_context)
+logger.add(
+    Path(__file__).parent.parent / "logs" / "latests.log",
+    format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[context]: <55}</cyan> | "
+            "<level>{message}</level>"
+        ),
+    colorize=False,
+    enqueue=True,
+    backtrace=True,
+    diagnose=True,
+    level="INFO"
+)
+logger.add(
+    sys.stdout,
+    format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[context]: <55}</cyan> | "
+            "<level>{message}</level>"
+        ),
+    colorize=True,
+    enqueue=True,
+    backtrace=True,
+    diagnose=True,
+    level="DEBUG"
+)
 
 def generate_trajectory_process(
     stop_event: MpEvent,
     process_exit_code: ValueProxy[int],
-    logger: LoggerAPI,
     forward_command_buffer: SharedCommandBuffer,
     translate_command_buffer: SharedCommandBuffer,
     rotate_command_buffer: SharedCommandBuffer,
@@ -29,7 +59,7 @@ def generate_trajectory_process(
     """
     config = Config.load_for_yml(CONFIG_FILE)
 
-    driver: Driver = driver_class(config, logger, ProcessNames.TRAJECTORY_CALCULATOR)
+    driver: Driver = driver_class(config, ProcessNames.TRAJECTORY_CALCULATOR)
 
     # Historique des positions passées pour mesurer la vitesse (heuristique d'inertie)
     position_history: deque[PreviousPosition] = deque(maxlen=config.others.previous_position_buffer_len)
@@ -62,8 +92,6 @@ def generate_trajectory_process(
                 elapsed_time = 0.0
 
             command_buffers = generate_trajectory(
-                logger,
-                ProcessNames.TRAJECTORY_CALCULATOR,
                 cast(Position, target_position),
                 previous_position,
                 elapsed_time,
@@ -88,7 +116,7 @@ def generate_trajectory_process(
     except KeyboardInterrupt:
         terminate()
     except BaseException as e:
-        logger.log(e, ProcessNames.TRAJECTORY_CALCULATOR, level=LoggingLevel.CRITICAL, force=True)
+        logger.critical(LoggerUtils.format_traceback(e))
         terminate()
         process_exit_code.set(1)
 
@@ -96,7 +124,6 @@ def generate_trajectory_process(
 def rc_control_process(
     stop_event: MpEvent,
     process_exit_code: ValueProxy[int],
-    logger: LoggerAPI,
     forward_command_buffer: SharedCommandBuffer,
     translate_command_buffer: SharedCommandBuffer,
     rotate_command_buffer: SharedCommandBuffer,
@@ -112,7 +139,7 @@ def rc_control_process(
 
     config = Config.load_for_yml(CONFIG_FILE)
 
-    driver: Driver = driver_class(config, logger, ProcessNames.RC_CONTROL)
+    driver: Driver = driver_class(config, ProcessNames.RC_CONTROL)
     # Capture initiale des buffers pour détecter les changements de consigne
     with command_buffers_lock:
         previous_buffers = AllCommandBuffers(
@@ -160,7 +187,6 @@ def rc_control_process(
                 previous_buffers = current_buffers.copy(use_deepcopy=True)
 
             running = rc_control(
-                logger,
                 ProcessNames.RC_CONTROL,
                 current_buffers,
                 buffer_start_time,
@@ -172,7 +198,7 @@ def rc_control_process(
     except KeyboardInterrupt:
         terminate()
     except BaseException as e:
-        logger.log(e, process=ProcessNames.RC_CONTROL, level=LoggingLevel.CRITICAL, force=True)
+        logger.critical(LoggerUtils.format_traceback(e))
         terminate()
         process_exit_code.set(2)
 
@@ -182,11 +208,7 @@ if __name__ == "__main__":
 
     stop_event = mp.Event()
 
-    logger = LoggerAPI(log_freq=config.utils.logger.log_freq)
-    logger_process = logger.create_logger(stop_event, LoggingLevel.DEBUG)
-    logger_process.start()
-
-    logger.log("Initialisation du manager et des variables partagées...", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
+    logger.info("Initialisation du manager et des variables partagées...")
 
     manager = mp.Manager()
 
@@ -200,13 +222,13 @@ if __name__ == "__main__":
     command_buffers_lock = mp.Lock()
     shared_sim_points_lock = mp.Lock()
 
-    logger.log("Manager et variables partagées initialisés.", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
-    logger.log("Lancement des processus...", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
+    logger.info("Manager et variables partagées initialisés.")
+    logger.info("Lancement des processus...")
 
     trajectory_process = mp.Process(
         target=generate_trajectory_process,
         args=(
-            stop_event, process_exit_code, logger,
+            stop_event, process_exit_code,
             forward_command_buffer, translate_command_buffer, rotate_command_buffer,
             shared_sim_points, command_buffers_lock, shared_sim_points_lock,
         ),
@@ -217,7 +239,7 @@ if __name__ == "__main__":
     rc_process = mp.Process(
         target=rc_control_process,
         args=(
-            stop_event, process_exit_code, logger,
+            stop_event, process_exit_code,
             forward_command_buffer, translate_command_buffer, rotate_command_buffer,
             shared_sim_points, command_buffers_lock, shared_sim_points_lock,
         ),
@@ -225,23 +247,18 @@ if __name__ == "__main__":
     )
     rc_process.start()
 
-    logger.log("Processus lancés.", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
+    logger.info("Processus lancés.")
 
     try:
         trajectory_process.join()
         rc_process.join()
-        logger_process.join()
     except KeyboardInterrupt:
         stop_event.set()
         process_exit_code.set(0)
 
     if process_exit_code.value == 0:
-        logger.instant_log("Arrêt du programme.", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
+        logger.info("Arrêt du programme.")
     else:
-        logger.instant_log(
-            f"Le programme a planté. Code de sortie : {process_exit_code.value}. Arrêt.",
-            process=ProcessNames.MAIN,
-            level=LoggingLevel.CRITICAL,
-        )
+        logger.critical(f"Le programme a planté. Code de sortie : {process_exit_code.value}. Arrêt.")
 
     sys.exit()

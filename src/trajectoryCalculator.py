@@ -1,3 +1,4 @@
+from loguru import logger
 from numba import njit  # type: ignore[import-untyped]
 
 from .utils import *
@@ -65,7 +66,7 @@ def compute_trajectory_core(
     y_pos: float,
     forward_scale: float,
     translate_scale: float,
-) -> tuple[float, float, float, float, float, float, float, float, float, float, list]:
+) -> tuple[float, float, float, float, float, float, float, float, float, float]:
     """Noyau de calcul Numba (JIT) pour generate_trajectory.
 
     Calcule les vitesses, durées et deltas d'inertie pour les axes forward et translate.
@@ -82,7 +83,6 @@ def compute_trajectory_core(
         y_dir                       : signe de la direction vers la cible en Y (+1 / -1)
         logs                        : liste de messages de debug (None = pas de message)
     """
-    logs: list[Optional[Any]] = [None]
 
     dx = x_target - x_pos   # positif si cible à droite
     dy = y_pos - y_target    # positif si cible en haut (y écran inversé)
@@ -113,13 +113,10 @@ def compute_trajectory_core(
         y_coast_delta,
         x_dir,
         y_dir,
-        logs,
     )
 
 
 def generate_trajectory(
-    logger: LoggerAPI,
-    process_name: ProcessNames,
     target_position: Position,
     previous_position: Position,
     elapsed_time: float,
@@ -150,7 +147,6 @@ def generate_trajectory(
         y_coast_delta,
         x_dir,
         y_dir,
-        logs,
     ) = compute_trajectory_core(
         float(config.others.rc_control_dt),
         float(target_position.x),
@@ -165,10 +161,6 @@ def generate_trajectory(
         float(config.movement_coeff.forward),
         float(config.movement_coeff.translate),
     )
-
-    for log_entry in logs:
-        if log_entry is not None:
-            logger.log(log_entry, process=process_name, level=LoggingLevel.DEBUG)
 
     # Point de debug : position d'arrêt prédite par l'inertie.
     # predicted_x = target.x - x_dir * x_coast_delta  (car x_coast_delta = (target - predicted) * x_dir)
@@ -199,7 +191,7 @@ def generate_trajectory(
         ))
 
     if debug:
-        logger.log(
+        logger.debug(
             f"""target position : {target_position.x} {target_position.y}
                distance X     : {abs_dx}
                distance Y     : {abs_dy}
@@ -210,9 +202,7 @@ def generate_trajectory(
                delta inertie Y: {y_coast_delta}
                buffer forward : {forward_buffer}
                buffer translate: {translate_buffer}
-               buffer rotate  : {rotate_buffer}""",
-            process=process_name,
-            level=LoggingLevel.DEBUG,
+               buffer rotate  : {rotate_buffer}"""
         )
 
     return AllCommandBuffers(forward=forward_buffer, translate=translate_buffer, rotate=rotate_buffer)

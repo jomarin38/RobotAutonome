@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import yaml
 from pydantic import BaseModel
 
@@ -73,11 +75,11 @@ class Config(BaseModel):
     others: OthersConfig
 
     @classmethod
-    def load_for_yml(cls, yml_path: str) -> "Config":
+    def load_for_yml(cls, yml_path: Path) -> "Config":
         with open(yml_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
         return cls(**config)
 
-    def save_to_yml(self, yml_path: str):
+    def save_to_yml(self, yml_path: Path):
         with open(yml_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(self.model_dump(), f, default_flow_style=False)

@@ -2,7 +2,6 @@ from .utils import *
 
 
 def get_active_command(
-    logger: LoggerAPI,
     process_name: ProcessNames,
     buffer: CommandBuffer,
     current_time: float,
@@ -15,7 +14,6 @@ def get_active_command(
     Retourne 0.0 si le buffer est vide ou tous les items sont expirés.
 
     Args:
-        logger: API de logging.
         process_name: Nom du processus appelant.
         buffer: Buffer temporel de commandes.
         current_time: Temps courant (en secondes).
@@ -29,11 +27,10 @@ def get_active_command(
     if current_time <= buffer_start_time + buffer[0].finish_time:
         return buffer[0].command
     buffer.pop(0)
-    return get_active_command(logger, process_name, buffer, current_time, buffer_start_time)
+    return get_active_command(process_name, buffer, current_time, buffer_start_time)
 
 
 def rc_control(
-    logger: LoggerAPI,
     process_name: ProcessNames,
     command_buffers: AllCommandBuffers,
     buffer_start_time: float,
@@ -50,15 +47,15 @@ def rc_control(
 
     # None si le buffer est vide : aucune consigne, l'inertie décroît librement
     forward_command = (
-        get_active_command(logger, process_name, command_buffers.forward, current_time, buffer_start_time)
+        get_active_command(process_name, command_buffers.forward, current_time, buffer_start_time)
         if len(command_buffers.forward) > 0 else None
     )
     translate_command = (
-        get_active_command(logger, process_name, command_buffers.translate, current_time, buffer_start_time)
+        get_active_command(process_name, command_buffers.translate, current_time, buffer_start_time)
         if len(command_buffers.translate) > 0 else None
     )
     rotate_command = (
-        get_active_command(logger, process_name, command_buffers.rotate, current_time, buffer_start_time)
+        get_active_command(process_name, command_buffers.rotate, current_time, buffer_start_time)
         if len(command_buffers.rotate) > 0 else None
     )
 

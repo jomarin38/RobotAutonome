@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import inspect
 import multiprocessing as mp
 import sys
 import threading
@@ -16,12 +17,13 @@ from multiprocessing.managers import ListProxy
 from multiprocessing.queues import Queue as MpQueue
 from multiprocessing.synchronize import Event as MpEvent
 from pprint import pformat
-from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
+from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override, Callable
 
 import colorama
 import serial
 from bleak import BleakClient
 from colorama import init
+from loguru import logger
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
@@ -32,44 +34,24 @@ init()  # IMPORTANT pour Windows CMD
 
 if TYPE_CHECKING:
     from src.simulateur import Sim
+    from loguru import Record
 
 from .config_manager import *
 
 # ============================================================================
-# ============================================================================
 # ÉNUMÉRATIONS
 # ============================================================================
-
-_counter = 0
-def auto():
-    global _counter
-    _counter += 1
-    return _counter
-
-@dataclass(frozen=True)
-class LoggingLevelData:
-    level: int
-    name: str
-
-
-class LoggingLevel(Enum):
-    """Niveaux de logging disponibles."""
-    DEBUG = LoggingLevelData(level=auto(), name=colorama.Fore.GREEN + "DEBUG" + colorama.Fore.RESET)
-    INFO = LoggingLevelData(level=auto(), name=colorama.Fore.BLUE + "INFO" + colorama.Fore.RESET)
-    WARNING = LoggingLevelData(level=auto(), name=colorama.Fore.YELLOW + "WARNING" + colorama.Fore.RESET)
-    ERROR = LoggingLevelData(level=auto(), name=colorama.Fore.RED + "ERROR" + colorama.Fore.RESET)
-    CRITICAL = LoggingLevelData(level=auto(), name=colorama.Fore.RED + colorama.Style.BRIGHT + "CRITICAL" + colorama.Style.RESET_ALL)
 
 
 class ProcessNames(str, Enum):
     RC_CONTROL = "RC contrôle"
     TRAJECTORY_CALCULATOR = "Trajectory calculator"
     MAIN = "Main"
-    LOGGER = "LOGGER"
 
 
 class DataclassInstance(Protocol):
     __dataclass_fields__: dict
+
 
 class DataClassUtils[T](ABC):
     """Classe de base utilitaire pour les dataclasses avec méthode copy."""
@@ -88,13 +70,6 @@ class DataClassUtils[T](ABC):
     @classmethod
     def from_dict(cls: type[T], data: dict | TypedDict) -> T:
         return from_dict(data_class=cls, data=data)  # type: ignore[arg-type]
-
-
-@dataclass(frozen=True)
-class LogItem(DataClassUtils):
-    """Item de log avec niveau et message."""
-    level: LoggingLevel
-    msg: str
 
 
 @dataclass(frozen=True)
@@ -166,10 +141,10 @@ class Driver(ABC):
     Les méthodes conditionnelles sont assignées dans __init__ ; appeler une méthode
     non assignée pour le processus actuel lèvera AttributeError immédiatement.
     """
-    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         self.config = config
-        self.logger = logger
         self.process_name = process_name
+        self.logger = logger.bind(cls=self.__class__.__name__)
 
         self.redis = StrictRedis(host=config.redis.host, port=config.redis.port, db=config.redis.db,
                                  decode_responses=True)
@@ -227,8 +202,8 @@ class Driver(ABC):
 
 
 class SimDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
-        super().__init__(config, logger, process_name)
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, process_name)
 
         from src.simulateur import Sim
 
@@ -273,16 +248,15 @@ class SimDriver(Driver):
 
 
 class SerialDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI,
-                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
-        super().__init__(config, logger, process_name)
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, process_name)
 
         # noinspection PyCallingNonCallable
-        logger.log("Initializing serial bus...", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
+        logger.info("Initializing serial bus...")
         self.serial_bus = Serial(port=config.serial.port_name, baudrate=config.serial.baud_rate, parity=serial.PARITY_NONE,
                             stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=config.serial.timeout)
         # noinspection PyCallingNonCallable
-        logger.log("Serial bus initialized !", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
+        logger.info("Serial bus initialized !")
 
     @override
     def _send_command(self, command: Command) -> bool:
@@ -292,8 +266,7 @@ class SerialDriver(Driver):
 
 # noinspection PyMissingConstructor,PyUnusedLocal
 class I2CDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI,
-                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         raise NotImplementedError("I2CDriver is not implemented yet")
 
     @override
@@ -306,9 +279,8 @@ class I2CDriver(Driver):
 
 
 class BluetoothDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI,
-                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
-        super().__init__(config, logger, process_name)
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, process_name)
 
         if process_name == ProcessNames.RC_CONTROL:
             self._loop = asyncio.new_event_loop()
@@ -326,8 +298,7 @@ class BluetoothDriver(Driver):
 
 # noinspection PyMissingConstructor,PyUnusedLocal
 class WifiDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI,
-                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         raise NotImplementedError("WifiDriver is not implemented yet")
 
     @override
@@ -353,119 +324,34 @@ class Drivers(Enum):
 # LOGGING
 # ============================================================================
 
-class Tee:
-    def __init__(self, *streams: TextIOWrapper):
-        self.streams = streams
-
-    def write(self, data: str):
-        for s in self.streams:
-            s.write(data)
-            s.flush()
-
-    def flush(self):
-        for s in self.streams:
-            s.flush()
-
-    def close(self):
-        for s in self.streams:
-            s.close()
-
-
-class Logger(mp.Process):
-    """Processus de logging multiprocessus."""
-    def __init__(self, log_queue: MpQueue[LogItem], logger_api: LoggerAPI, stop_event: MpEvent, level: LoggingLevel, files: Optional[list[str]]=None) -> None:
-        super().__init__()
-        self.log_queue = log_queue
-        self.stop_event: MpEvent = stop_event
-        self.level: LoggingLevel = level
-        self.files = files
-        self.logger_api = logger_api
-
-    def run(self):
-        streams = Tee(*(open(file, "w", encoding="utf-8") for file in self.files) if self.files is not None else [sys.stdout])
-        while True:
-            if self.stop_event.is_set() and self.log_queue.empty(): break
-
-            # noinspection PyBroadException
-            try:
-                log_item = self.log_queue.get()
-                if log_item.level.value.level >= self.level.value.level: print(log_item.msg, file=streams, flush=True)
-
-            except KeyboardInterrupt:
-                if self.log_queue.empty(): pass
-                else:
-                    self.stop_event.set()
-                    streams.close()
-            except BaseException as e:
-                # noinspection PyBroadException
-                try:
-                    print(self.logger_api.format_traceback(e, ProcessNames.LOGGER, LoggingLevel.ERROR), file=streams, flush=True)
-                except KeyboardInterrupt:
-                    if self.log_queue.empty(): pass
-                    else:
-                        self.stop_event.set()
-                        streams.close()
-                except BaseException:
-                    pass
-                break
-
-
-class LoggerAPI:
-    """API de logging pour les processus."""
-    def __init__(self, log_freq: float = 0.5):
-        self.logger_is_defined = False
-        self.files = None
-        self._prev_time = time.perf_counter()
-        self.log_freq = log_freq * 1000
-        self.log_queue = mp.Queue()
-
-    def create_logger(self, stop_event: MpEvent, level: LoggingLevel, files: Optional[list[str]]=None):
-        self.files = files
-        self.logger_is_defined = True
-        return Logger(self.log_queue, self, stop_event, level=level, files=files)
-
+class LoggerUtils:
     @staticmethod
-    def format_log(msg: str, process: ProcessNames, level: LoggingLevel, use_pprint: bool = False):
-        return f"{process.value} | {level.value.name} | {pformat(msg.replace("\n", "")) + ("\n" if msg.endswith("\n") else "") if use_pprint else msg}"
-
-    @staticmethod
-    def format_traceback(e: BaseException, process: ProcessNames, level: LoggingLevel):
-        colored_e = highlight(
+    def format_traceback(e: BaseException) -> str:
+        return highlight(
             "".join(traceback.TracebackException.from_exception(e).format()),
             PythonTracebackLexer(),
             TerminalFormatter()
         )
-        return LoggerAPI.format_log(colored_e, process, level, use_pprint=False)
 
-    def _log(self, msg: str, level: LoggingLevel, force: bool) -> bool:
-        if not self.logger_is_defined:
-            raise AttributeError("Logger instance has not been created yet")
 
-        if self._prev_time + self.log_freq > (current_time := time.perf_counter()) or force:
-            self.log_queue.put(LogItem(level=level, msg=msg))
-            self._prev_time = current_time
-            return True
-        else:
-            return False
+# ============================================================================
+# METHODES POUR LE LOGGER
+# ============================================================================
 
-    def instant_log(self, msg: str, process: ProcessNames, level: LoggingLevel=LoggingLevel.INFO, use_pprint: bool = False):
-        if not self.logger_is_defined:
-            raise AttributeError("Logger instance has not been created yet")
-        streams = Tee(*(open(file, "w", encoding="utf-8") for file in self.files) if self.files is not None else [sys.stdout])
-        print(self.format_log(msg, process, level, use_pprint=use_pprint), file=streams, flush=True)
-        streams.close()
+def bind_context(record):
+    file = record["file"].name
+    line = record["line"]
+    func = record["function"]
 
-    @singledispatchmethod
-    def log(self, msg, process: ProcessNames, level: LoggingLevel=LoggingLevel.INFO, use_pprint: bool = False, force: bool = False):
-        raise NotImplementedError(f"No log handler for type {type(msg).__name__}")
+    cls = record["extra"].get("cls")
 
-    @log.register(str)
-    def _(self, msg: str, process: ProcessNames, level: LoggingLevel=LoggingLevel.INFO, use_pprint: bool = False, force: bool = False) -> bool:
-            return self._log(self.format_log(msg, process, level=level, use_pprint=use_pprint), level=level, force=force)
+    if func == "<module>":
+        func = "main"
 
-    @log.register(BaseException)
-    def _(self, e: BaseException, process: ProcessNames, level: LoggingLevel=LoggingLevel.INFO, _use_pprint: Optional[Any] = None, force: bool = False) -> bool:
-        return self._log(self.format_traceback(e, process, level=level), level=level, force=force)
+    if cls:
+        record["extra"]["context"] = f"{file}::{cls}::{func}:{line}"
+    else:
+        record["extra"]["context"] = f"{file}::{func}:{line}"
 
 
 # ============================================================================
