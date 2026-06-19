@@ -82,6 +82,7 @@ class Sim:
         inertia_factor_rotate: Optional[float] = None,
         inertia_factor_forward: Optional[float] = None,
         inertia_factor_translate: Optional[float] = None,
+        redis: Optional[StrictRedis] = None,
     ):
         self._target_position: Optional[Position] = None
         self.previous_time: Optional[float] = None
@@ -110,6 +111,8 @@ class Sim:
         self.inertia_factor_translate: float = inertia_factor_translate if inertia_factor_translate is not None else inertia_factor
 
         self.sim_points: dict[str, SimPoint] = {}
+
+        self.redis = redis
 
     def reset(self, initial_position: Position) -> tuple[bool, Observation]:
         """Réinitialise le simulateur et place le robot à la position de départ."""
@@ -241,6 +244,10 @@ class Sim:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # clic gauche → définit la cible
                     self.target_position = Position(x=event.pos[0], y=event.pos[1], direction=0)
+                    if self.redis:
+                        self.redis.set('robot_x', self.target_position.x)
+                        self.redis.set('robot_y', self.target_position.y)
+                        self.redis.set('robot_direction', self.target_position.direction)
 
         # Fond blanc
         self.window.fill((255, 255, 255))

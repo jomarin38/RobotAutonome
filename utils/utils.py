@@ -16,7 +16,7 @@ from multiprocessing.managers import DictProxy, ListProxy
 from multiprocessing.synchronize import Event as MpEvent
 from multiprocessing.synchronize import Lock as MpLock
 from multiprocessing.queues import Queue as MpQueue
-from typing import Optional, Callable, TYPE_CHECKING, Any, TypedDict, TypeVar, cast, Protocol, Literal
+from typing import Optional, Callable, TYPE_CHECKING, Any, TypedDict, TypeVar, cast, Protocol, Literal, override
 
 import colorama
 from bleak import BleakClient
@@ -284,18 +284,29 @@ class BluetoothEnvHandler(DataClassUtils):
 
 
 class Driver(ABC):
-    def __init__(self, config: Config, logger: LoggerAPI, process_name: ProcessNames,
-                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
+    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         self.config = config
         self.logger = logger
         self.process_name = process_name
-        self.global_target_position = global_target_position
-        self.global_target_position_lock = global_target_position_lock
 
         self.redis = StrictRedis(host=config.redis.host, port=config.redis.port, db=config.redis.db,
                                  decode_responses=True)
 
-    def get_robot_position(self) -> Position:
+        if process_name == ProcessNames.RC_CONTROL : self.send_command = self._send_command
+        if process_name == ProcessNames.TRAJECTORY_CALCULATOR:
+            self.get_robot_position = self._get_robot_position
+            self.get_target_position = self._get_target_position
+
+    def _get_target_position(self) -> Position:
+        x = self.redis.get("target_x")
+        y = self.redis.get("target_y")
+        direction = self.redis.get("target_direction")
+        return Position(x=x, y=y, direction=direction)
+
+    @abstractmethod
+    def _send_command(self, command: Command) -> bool: ...
+
+    def _get_robot_position(self) -> Position:
         """Récupère la position courante du robot depuis Redis."""
         raw_x = cast(float, self.redis.get("robot_x"))
         raw_y = cast(float, self.redis.get("robot_y"))
@@ -306,19 +317,18 @@ class Driver(ABC):
 
         return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
 
-    @abstractmethod
-    def get_target_position(self) -> Position: ...
+    def stop(self):
+        self.redis.close()
 
-    @abstractmethod
-    def send_command(self, command: Command): ...
+    def as_target(self):
+        return self.get_target_position().x is not None
 
 
 class SimDriver(Driver):
-    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL],
-                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
-        super().__init__(config, logger, process_name, global_target_position, global_target_position_lock)
+    def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, logger, process_name)
 
-        if process_name == ProcessNames.TRAJECTORY_CALCULATOR : self.sim = Sim(
+        if process_name == ProcessNames.RC_CONTROL: self.sim = Sim(
             window_size=(config.sim.window.width, config.sim.window.height),
             tick_rate=config.sim.tick_rate,
             forward_scale=config.movement_coeff.forward,
@@ -327,31 +337,27 @@ class SimDriver(Driver):
             inertia_factor_forward=config.inertia_factor.forward,
             inertia_factor_translate=config.inertia_factor.translate,
             inertia_factor_rotate=config.inertia_factor.rotate,
+            redis=self.redis
         )
 
-    def get_target_position(self) -> Position:
-        if self.process_name != ProcessNames.TRAJECTORY_CALCULATOR: raise RuntimeError(
-            "Driver::get_target_position doit uniquement être appeler dans le processus TRAJECTORY_CALCULATOR.")
-
-        with self.global_target_position_lock:
-            return Position(**copy.deepcopy(dict(self.global_target_position)))
-
-    def send_command(self, command: Command) -> bool:
-        if self.process_name != ProcessNames.RC_CONTROL: raise RuntimeError(
-            "Driver::send_command doit uniquement être appeler dans le processus RC_CONTROL.")
-
+    @override
+    def _send_command(self, command: Command) -> bool:
         running, obs = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
         self.redis.set('robot_x', obs.robot_position.x)
         self.redis.set('robot_y', obs.robot_position.y)
         self.redis.set('robot_direction', obs.robot_position.direction)
         return running
 
+    @override
+    def stop(self):
+        super().stop()
+        if self.process_name == ProcessNames.RC_CONTROL: self.sim.close()
+
 
 class SerialDriver(Driver):
     def __init__(self, config: Config, logger: LoggerAPI,
-                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL],
-                 global_target_position: DictProxy[str, Optional[float]], global_target_position_lock: MpLock):
-        super().__init__(config, logger, process_name, global_target_position, global_target_position_lock)
+                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, logger, process_name)
 
         # noinspection PyCallingNonCallable
         logger.log("Initializing serial bus...", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
@@ -360,17 +366,56 @@ class SerialDriver(Driver):
         # noinspection PyCallingNonCallable
         logger.log("Serial bus initialized !", ProcessNames.RC_CONTROL, LoggingLevel.INFO)
 
-    def get_target_position(self) -> Position:
-        if self.process_name != ProcessNames.TRAJECTORY_CALCULATOR : raise RuntimeError("Driver::get_target_position doit uniquement être appeler dans le processus TRAJECTORY_CALCULATOR.")
-
-        x = self.redis.get("target_x")
-        y = self.redis.get("target_y")
-        direction = self.redis.get("target_direction")
-        return Position(x=x, y=y, direction=direction)
-
-    def send_command(self, command: Command):
-        if self.process_name != ProcessNames.RC_CONTROL : raise RuntimeError("Driver::send_command doit uniquement être appeler dans le processus RC_CONTROL.")
+    @override
+    def _send_command(self, command: Command) -> bool:
         self.serial_bus.write(f"{command.forward} {command.rotate} {command.translate}\n".encode())
+
+
+class I2CDriver(Driver):
+    def __init__(self, config: Config, logger: LoggerAPI,
+                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        raise NotImplementedError("I2CDriver is not implemented yet")
+
+    @override
+    def _get_target_position(self) -> Position:
+        raise NotImplementedError("I2CDriver::_get_target_position is not implemented yet")
+
+    @override
+    def _send_command(self, command: Command) -> bool:
+        raise NotImplementedError("I2CDriver::_send_command is not implemented yet")
+
+
+class BluetoothDriver(Driver):
+    def __init__(self, config: Config, logger: LoggerAPI,
+                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        super().__init__(config, logger, process_name)
+
+        if process_name == ProcessNames.RC_CONTROL:
+            self._loop = asyncio.new_event_loop()
+            self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+
+    @override
+    def _send_command(self, command: Command) -> bool:
+        asyncio.run_coroutine_threadsafe(self._send_ble(command), self._loop)
+        return True
+
+    async def _send_ble(self, command: Command):
+        async with BleakClient(self.config.bluetooth.adress) as client:
+            await client.write_gatt_char(self.config.bluetooth.char_uuid, f"{command.forward};{command.translate};{command.rotate}".encode())
+
+
+class WifiDriver(Driver):
+    def __init__(self, config: Config, logger: LoggerAPI,
+                 process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+        raise NotImplementedError("WifiDriver is not implemented yet")
+
+    @override
+    def _get_target_position(self) -> Position:
+        raise NotImplementedError("WifiDriver::_get_target_position is not implemented yet")
+
+    @override
+    def _send_command(self, command: Command) -> bool:
+        raise NotImplementedError("WifiDriver::_send_command is not implemented yet")
 
 
 class EnvHandler(Enum):
@@ -381,6 +426,14 @@ class EnvHandler(Enum):
     BLUETOOTH = BluetoothEnvHandler(use_target_handler=lambda target_handler: getattr(target_handler, "redis_handler"),
                         use_robot_position_handler=lambda robot_position_handler: getattr(robot_position_handler, "redis_handler"),
                         use_control_handler=lambda control_data: getattr(control_data, "bluetooth_handler"))
+
+
+class ControlDrivers(Enum):
+    SIM = SimDriver
+    SERIAL = SerialDriver
+    I2C = I2CDriver
+    BLUETOOTH = BluetoothDriver
+    WIFI = WifiDriver
 
 
 # ============================================================================

@@ -13,15 +13,13 @@ from rcControl import rc_control
 from trajectoryCalculator import generate_trajectory
 
 CONFIG_FILE = "config.yml"
-ENV_DATA = EnvHandler.SIM
+control_driver_class = ControlDrivers.SIM.value
 
 
 def generate_trajectory_process(
     stop_event: MpEvent,
     process_exit_code: ValueProxy[int],
     logger: LoggerAPI,
-    shared_target_position: DictProxy[str, Optional[float]],
-    target_position_lock: MpLock,
     forward_command_buffer: SharedCommandBuffer,
     translate_command_buffer: SharedCommandBuffer,
     rotate_command_buffer: SharedCommandBuffer,
@@ -35,20 +33,15 @@ def generate_trajectory_process(
     puis écrit les buffers partagés (forward / translate / rotate).
     """
     config = Config.load_for_yml(CONFIG_FILE)
-    redis = create_redis_client(config.redis)
 
-    target_handler = TargetHandler(
-        sim_handler=TargetSimHandler(global_target_position=shared_target_position, lock=target_position_lock),
-        redis_handler=TargetRedisHandler(redis_db=redis),
-    )
-    use_target_handler = ENV_DATA.value.use_target_handler(target_handler)
+    control_driver: Driver = control_driver_class(config, logger, ProcessNames.TRAJECTORY_CALCULATOR)
 
     # Historique des positions passées pour mesurer la vitesse (heuristique d'inertie)
     position_history: deque[PreviousPosition] = deque(maxlen=config.others.previous_position_buffer_len)
 
     def terminate() -> None:
         stop_event.set()
-        redis.close()
+        control_driver.stop()
 
     # noinspection PyBroadException
     try:
@@ -57,11 +50,11 @@ def generate_trajectory_process(
 
             sim_points: list[SimPoint] = []
 
-            target_position = get_target(use_target_handler)
-            if target_position.x is None:
+            target_position = control_driver.get_target_position()
+            if control_driver.as_target() is None:
                 continue
 
-            robot_position = get_robot_pose(redis)
+            robot_position = control_driver.get_robot_position()
             current_time = time.time()
 
             # Calcul du delta de temps et de la position de référence pour mesurer la vitesse
@@ -127,37 +120,7 @@ def rc_control_process(
 
     config = Config.load_for_yml(CONFIG_FILE)
 
-    sim = Sim(
-        window_size=(config.sim.window.width, config.sim.window.height),
-        tick_rate=config.sim.tick_rate,
-        forward_scale=config.movement_coeff.forward,
-        translate_scale=config.movement_coeff.translate,
-        rotate_scale=config.movement_coeff.rotate,
-        inertia_factor_forward=config.inertia_factor.forward,
-        inertia_factor_translate=config.inertia_factor.translate,
-        inertia_factor_rotate=config.inertia_factor.rotate,
-    )
-    redis = create_redis_client(config.redis)
-
-    target_handler = TargetHandler(
-        sim_handler=TargetSimHandler(sim=sim, global_target_position=shared_target_position, lock=target_position_lock),
-        redis_handler=TargetRedisHandler(redis_db=redis),
-    )
-    use_target_handler = ENV_DATA.value.use_target_handler(target_handler)
-
-    robot_position_handler = RobotPosHandler(
-        sim_handler=RobotPosSimHandler(redis_db=redis),
-        redis_handler=RobotPosRedisHandler(redis_db=redis),
-    )
-    use_robot_position_handler = ENV_DATA.value.use_robot_position_handler(robot_position_handler)
-
-    control_handler = ControlHandler(
-        sim_handler=ControlSimHandler(sim=sim, redis_db=redis),
-        serial_handler=ControlSerialHandler(config=config.serial),
-        i2c_handler=ControlI2CHandler(),
-        bluetooth_handler=ControlBluetoothHandler(BluetoothManager(config=config))
-    )
-    use_control_handler = ENV_DATA.value.use_control_handler(control_handler)
+    control_driver: Driver = control_driver_class(config, logger, ProcessNames.RC_CONTROL)
 
     # Capture initiale des buffers pour détecter les changements de consigne
     with command_buffers_lock:
@@ -171,8 +134,7 @@ def rc_control_process(
 
     def terminate() -> None:
         stop_event.set()
-        sim.close()
-        redis.close()
+        control_driver.stop()
 
     # noinspection PyBroadException
     try:
@@ -183,8 +145,6 @@ def rc_control_process(
                 direction=config.sim.start_position.direction,
             )
         )
-        set_robot_pose(use_robot_position_handler, initial_observation.robot_position)
-
         while not stop_event.is_set():
             time.sleep(0.01)  # tick RC à ~100 Hz
 
@@ -198,10 +158,9 @@ def rc_control_process(
                 terminate()
                 break
 
-            local_target_position = set_target(use_target_handler)
-            if local_target_position is None:
+            if not control_driver.as_target():
                 # Pas de cible : arrêt progressif via l'inertie
-                running, _ = sim.move(rotate=0, forward=0, translate=0)
+                running, _ = control_driver.send_command(Command(0, 0, 0))
                 continue
 
             with command_buffers_lock:
@@ -221,7 +180,7 @@ def rc_control_process(
                 ProcessNames.RC_CONTROL,
                 current_buffers,
                 buffer_start_time,
-                use_control_handler,
+                control_driver
             )
 
         terminate()
@@ -269,7 +228,6 @@ if __name__ == "__main__":
         target=generate_trajectory_process,
         args=(
             stop_event, process_exit_code, logger,
-            shared_target_position, target_position_lock,
             forward_command_buffer, translate_command_buffer, rotate_command_buffer,
             shared_sim_points, command_buffers_lock, shared_sim_points_lock,
         ),

@@ -26,7 +26,7 @@ def rc_control(
     process_name: ProcessNames,
     command_buffers: AllCommandBuffers,
     buffer_start_time: float,
-    use_control_handler: ControlSimHandler,
+    control_driver: Driver,
 ) -> bool:
     """Applique la commande courante de chaque axe au robot.
 
@@ -51,8 +51,7 @@ def rc_control(
         if len(command_buffers.rotate) > 0 else None
     )
 
-    running = send_command(
-        use_control_handler,
+    running = control_driver.send_command(
         Command(
             rotate=-rotate_command if rotate_command is not None else None,
             forward=forward_command,
