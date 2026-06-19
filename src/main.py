@@ -1,17 +1,13 @@
-import copy
-import multiprocessing as mp
-import sys
-import time
 from collections import deque
 from multiprocessing.managers import ListProxy, DictProxy, ValueProxy  # type: ignore
-from multiprocessing.synchronize import Event as MpEvent
 from multiprocessing.synchronize import Lock as MpLock
+from pathlib import Path
 
-from rcControl import rc_control
-from trajectoryCalculator import generate_trajectory
-from utils import *
+from .rcControl import rc_control
+from .trajectoryCalculator import generate_trajectory
+from .utils import *
 
-CONFIG_FILE = "config.yml"
+CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
 
 

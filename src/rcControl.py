@@ -1,4 +1,4 @@
-from utils import *
+from .utils import *
 
 
 def get_active_command(

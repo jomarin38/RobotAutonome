@@ -9,7 +9,7 @@ serial:
   timeout: 0.2
 
 bluetooth:
-  adress: "F0:F5:64:8C:CB:07"
+  address: "F0:F5:64:8C:CB:07"
   char_uuid: "00001101-0000-1000-8000-00805f9b34fb"
 
 sim:

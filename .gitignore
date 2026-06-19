@@ -39,3 +39,4 @@ uv.lock
 # Poetry (hérité, si migration)
 # poetry.lock
 # poetry.toml
+/dump.rdb

@@ -1,6 +1,6 @@
 from numba import njit  # type: ignore[import-untyped]
 
-from utils import *
+from .utils import *
 
 debug = False
 

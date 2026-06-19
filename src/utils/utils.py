@@ -16,7 +16,7 @@ from multiprocessing.managers import ListProxy
 from multiprocessing.queues import Queue as MpQueue
 from multiprocessing.synchronize import Event as MpEvent
 from pprint import pformat
-from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override, TypeGuard, overload
+from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
 
 import colorama
 import serial
@@ -31,7 +31,7 @@ from serial import Serial
 init()  # IMPORTANT pour Windows CMD
 
 if TYPE_CHECKING:
-    from simulateur import Sim
+    from src.simulateur import Sim
 
 from .config_manager import *
 
@@ -207,7 +207,7 @@ class Driver(ABC):
         raw_y = cast(Optional[str], self.redis.get("robot_y"))
         raw_direction = cast(Optional[str], self.redis.get("robot_direction"))
 
-        if None not in [raw_x, raw_y, raw_direction]:
+        if None in [raw_x, raw_y, raw_direction]:
             raise ValueError("Position ou direction absente de Redis")
 
         return Position(x=float(cast(str, raw_x)), y=float(cast(str, raw_y)), direction=float(cast(str, raw_direction)))
@@ -230,7 +230,7 @@ class SimDriver(Driver):
     def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         super().__init__(config, logger, process_name)
 
-        from simulateur import Sim
+        from src.simulateur import Sim
 
         if process_name == ProcessNames.RC_CONTROL:
             self.sim = Sim(

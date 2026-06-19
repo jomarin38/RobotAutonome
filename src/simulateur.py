@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pygame
 
-from utils import *
+from .utils import *
 
 class RobotBase(ABC):
     x: float
@@ -26,7 +26,7 @@ class Robot(pygame.sprite.Sprite, RobotBase):
         rotate_scale: float,
     ):
         super().__init__()
-        self.image = pygame.image.load(Path(__file__).parent / "robot.png")
+        self.image = pygame.image.load(Path(__file__).parent.parent / "assets" / "robot.png")
         self.rect = self.image.get_rect()
 
         self.rect.center = (int(x), int(y))
@@ -266,7 +266,7 @@ class Sim:
                     if self.redis:
                         self.redis.set('target_x', event.pos[0])
                         self.redis.set('target_y', event.pos[1])
-                        self.redis.set('target_direction', event.pos[2])
+                        self.redis.set('target_direction', 0)
 
         # Fond blanc
         self.window.fill((255, 255, 255))
