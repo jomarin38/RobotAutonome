@@ -8,12 +8,13 @@ import pygame
 
 from utils import *
 
-
-class Robot(pygame.sprite.Sprite):
-    """Sprite du robot : gère la physique de déplacement et la rotation."""
-
+class RobotBase(ABC):
     x: float
     y: float
+    direction: float
+
+class Robot(pygame.sprite.Sprite, RobotBase):
+    """Sprite du robot : gère la physique de déplacement et la rotation."""
 
     def __init__(
         self,
@@ -29,7 +30,7 @@ class Robot(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
 
         self.rect.center = (int(x), int(y))
-        self.direction = direction
+        self.direction: float = direction
         self.original_image = self.image
         self.x: float = float(self.rect.centerx)
         self.y: float = float(self.rect.centery)
@@ -65,6 +66,13 @@ class Robot(pygame.sprite.Sprite):
         self.rect.center = (int(self.x), int(self.y))
 
 
+@dataclass(frozen=True)
+class NotDefinedRobot(RobotBase):
+    x: float
+    y: float
+    direction: float
+
+
 class Sim:
     """Simulateur Pygame du robot.
 
@@ -86,9 +94,10 @@ class Sim:
         inertia_factor_translate: Optional[float] = None,
         redis: Optional[StrictRedis] = None,
     ):
+        self.robot = cast(Robot, None)
         self._target_position: Optional[Position] = None
         self.previous_time: Optional[float] = None
-        self.robot: Optional[Robot] = None
+        self.robot: Robot
         pygame.init()
 
         self.window = pygame.display.set_mode(window_size)
@@ -116,8 +125,11 @@ class Sim:
 
         self.redis = redis
 
+        self.reseted = False
+
     def reset(self, initial_position: Position) -> tuple[bool, Observation]:
         """Réinitialise le simulateur et place le robot à la position de départ."""
+
         self.robot = Robot(
             initial_position.x,
             initial_position.y,
@@ -132,6 +144,9 @@ class Sim:
         self.rotate_speed = 0.0
         self.forward_speed = 0.0
         self.translate_speed = 0.0
+
+        self.reseted = True
+
         return self.running, self.get_observation()
 
     @property
@@ -148,7 +163,7 @@ class Sim:
         self.sim_points[sim_point.name] = sim_point
 
     def add_all_sim_points(self, sim_points: list[SimPoint]) -> None:
-        update = self.sim_points.update({sp.name: sp for sp in sim_points})
+        self.sim_points.update({sp.name: sp for sp in sim_points})
 
     def remove_sim_point(self, name: str) -> bool:
         """Supprime un point de debug par son nom. Retourne True si trouvé."""
@@ -197,6 +212,8 @@ class Sim:
         La physique est appliquée AVANT le blend pour que l'heuristique reste correcte :
             coast_distance = measured_speed * tick_interval / (1 - inertia_factor)
         """
+        if not self.reseted: raise RuntimeError("Un reset dot être fait avant de pouvoir bouger.")
+
         # 1) Appliquer le mouvement à la vitesse courante (avant blend)
         result = self.update()
 
@@ -247,9 +264,9 @@ class Sim:
                 if event.button == 1:  # clic gauche → définit la cible
                     self.target_position = Position(x=event.pos[0], y=event.pos[1], direction=0)
                     if self.redis:
-                        self.redis.set('target_x', self.target_position.x)
-                        self.redis.set('target_y', self.target_position.y)
-                        self.redis.set('target_direction', self.target_position.direction)
+                        self.redis.set('target_x', event.pos[0])
+                        self.redis.set('target_y', event.pos[1])
+                        self.redis.set('target_direction', event.pos[2])
 
         # Fond blanc
         self.window.fill((255, 255, 255))
@@ -286,7 +303,7 @@ class Sim:
         pygame.draw.line(self.window, (50, 50, 50), (self.robot.x - 30, self.robot.y - 50), (self.robot.x - 30 - label_width, self.robot.y - 50), 5)
 
         # Dessin de la cible (cercle rouge + coordonnées)
-        if isinstance(self.target_position, Position):
+        if self.target_position is not None:
             target = cast(Position, self.target_position)
             pygame.draw.circle(self.window, (255, 0, 0), (target.x, target.y), 10)
             x_label_target = self.font.render(f"x: {int(target.x)}", True, (0, 0, 0))

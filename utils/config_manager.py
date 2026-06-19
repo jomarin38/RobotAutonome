@@ -15,7 +15,7 @@ class SerialConfig(BaseModel):
 
 
 class BluetoothConfig(BaseModel):
-    adress: str
+    address: str
     char_uuid: str
 
 

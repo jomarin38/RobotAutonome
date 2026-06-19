@@ -12,7 +12,7 @@ from trajectoryCalculator import generate_trajectory
 from utils import *
 
 CONFIG_FILE = "config.yml"
-driver_class = ControlDrivers.SIM.value
+driver_class = Drivers.SIM.value
 
 
 def generate_trajectory_process(
@@ -50,7 +50,6 @@ def generate_trajectory_process(
             sim_points: list[SimPoint] = []
 
             target_position = driver.get_target_position()
-            logger.log(repr(target_position), ProcessNames.RC_CONTROL, LoggingLevel.DEBUG)
             if not driver.has_target():
                 continue
 
@@ -69,7 +68,7 @@ def generate_trajectory_process(
             command_buffers = generate_trajectory(
                 logger,
                 ProcessNames.TRAJECTORY_CALCULATOR,
-                target_position,
+                cast(Position, target_position),
                 previous_position,
                 elapsed_time,
                 robot_position,
@@ -134,7 +133,7 @@ def rc_control_process(
 
     # noinspection PyBroadException
     try:
-        running = driver.send_command(Command(0, 0, 0))
+        running = driver.send_command(Command(None, None, None))
         while not stop_event.is_set():
             time.sleep(0.01)  # tick RC à ~100 Hz
 
@@ -149,7 +148,7 @@ def rc_control_process(
 
             if not driver.has_target():
                 # Pas de cible : arrêt progressif via l'inertie
-                running = driver.send_command(Command(0, 0, 0))
+                running = driver.send_command(Command(None, None, None))
                 continue
 
             with command_buffers_lock:

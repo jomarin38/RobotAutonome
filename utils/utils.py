@@ -16,7 +16,7 @@ from multiprocessing.managers import ListProxy
 from multiprocessing.queues import Queue as MpQueue
 from multiprocessing.synchronize import Event as MpEvent
 from pprint import pformat
-from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
+from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override, TypeGuard, overload
 
 import colorama
 import serial
@@ -71,7 +71,7 @@ class ProcessNames(str, Enum):
 class DataclassInstance(Protocol):
     __dataclass_fields__: dict
 
-class DataClassUtils[T, DataclassInstance](ABC):
+class DataClassUtils[T](ABC):
     """Classe de base utilitaire pour les dataclasses avec méthode copy."""
     def copy(self, use_deepcopy: bool=True) -> DataClassUtils:
         return copy.deepcopy(self) if use_deepcopy else copy.copy(self)
@@ -139,9 +139,9 @@ class Observation(DataClassUtils):
 @dataclass(frozen=True)
 class Command(DataClassUtils):
     """Commande de mouvement : forward, translate, rotate."""
-    forward: float
-    translate: float
-    rotate: float
+    forward: Optional[float]
+    translate: Optional[float]
+    rotate: Optional[float]
 
 
 @dataclass(frozen=True)
@@ -183,30 +183,34 @@ class Driver(ABC):
                 self.get_robot_position = self._get_robot_position
                 self.get_target_position = self._get_target_position
 
-    def _get_target_position(self) -> Position:
+    def _get_target_position(self) -> Optional[Position]:
         """Récupère la position cible depuis Redis.
 
         Returns:
             Position avec x, y, direction (peut contenir None si cible non définie).
         """
-        x = float(self.redis.get("target_x")) if self.redis.get("target_x") is not None else None
-        y = float(self.redis.get("target_y")) if self.redis.get("target_y") is not None else None
-        direction = float(self.redis.get("target_direction")) if self.redis.get("target_direction") is not None else None
-        return Position(x=x, y=y, direction=direction)
+        raw_x = cast(Optional[str], self.redis.get("target_x"))
+        raw_y = cast(Optional[str], self.redis.get("target_y"))
+        raw_direction = cast(Optional[str], self.redis.get("target_direction"))
+
+        x = float(raw_x) if raw_x is not None else None
+        y = float(raw_y) if raw_y is not None else None
+        direction = float(raw_direction) if raw_direction is not None else None
+        return Position(x=cast(float, x), y=cast(float, y), direction=cast(float, direction)) if None not in [x, y, direction] else None
 
     @abstractmethod
     def _send_command(self, command: Command) -> bool: ...
 
     def _get_robot_position(self) -> Position:
         """Récupère la position courante du robot depuis Redis."""
-        raw_x = cast(float, self.redis.get("robot_x"))
-        raw_y = cast(float, self.redis.get("robot_y"))
-        raw_direction = cast(float, self.redis.get("robot_direction"))
+        raw_x = cast(Optional[str], self.redis.get("robot_x"))
+        raw_y = cast(Optional[str], self.redis.get("robot_y"))
+        raw_direction = cast(Optional[str], self.redis.get("robot_direction"))
 
-        if raw_x is None or raw_y is None or raw_direction is None:
+        if None not in [raw_x, raw_y, raw_direction]:
             raise ValueError("Position ou direction absente de Redis")
 
-        return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
+        return Position(x=float(cast(str, raw_x)), y=float(cast(str, raw_y)), direction=float(cast(str, raw_direction)))
 
     def stop(self) -> None:
         """Arrête le driver : flush Redis et ferme la connexion."""
@@ -215,7 +219,7 @@ class Driver(ABC):
 
     def has_target(self) -> bool:
         """Vérifie si une cible est définie et accessible."""
-        return self._get_target_position().x is not None
+        return self._get_target_position() is not None
 
     def _add_sim_point(self, point: SimPoint) -> None: ...
 
@@ -286,6 +290,7 @@ class SerialDriver(Driver):
         return True
 
 
+# noinspection PyMissingConstructor,PyUnusedLocal
 class I2CDriver(Driver):
     def __init__(self, config: Config, logger: LoggerAPI,
                  process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
@@ -315,10 +320,11 @@ class BluetoothDriver(Driver):
         return True
 
     async def _send_ble(self, command: Command):
-        async with BleakClient(self.config.bluetooth.adress) as client:
+        async with BleakClient(self.config.bluetooth.address) as client:
             await client.write_gatt_char(self.config.bluetooth.char_uuid, f"{command.forward};{command.translate};{command.rotate}".encode())
 
 
+# noinspection PyMissingConstructor,PyUnusedLocal
 class WifiDriver(Driver):
     def __init__(self, config: Config, logger: LoggerAPI,
                  process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
@@ -333,7 +339,9 @@ class WifiDriver(Driver):
         raise NotImplementedError("WifiDriver::_send_command is not implemented yet")
 
 
-class ControlDrivers(Enum):
+class Drivers(Enum):
+    value: type[Driver]
+
     SIM = SimDriver
     SERIAL = SerialDriver
     I2C = I2CDriver

@@ -64,7 +64,7 @@ def rc_control(
 
     running = driver.send_command(
         Command(
-            rotate=-rotate_command if rotate_command is not None else None,
+            rotate=-rotate_command if rotate_command else None,
             forward=forward_command,
             translate=translate_command,
         ),
