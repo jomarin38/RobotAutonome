@@ -1,19 +1,18 @@
-from utils import *
-
 import copy
 import multiprocessing as mp
 import sys
 import time
+from collections import deque
 from multiprocessing.managers import ListProxy, DictProxy, ValueProxy  # type: ignore
 from multiprocessing.synchronize import Event as MpEvent
 from multiprocessing.synchronize import Lock as MpLock
-from collections import deque
 
 from rcControl import rc_control
 from trajectoryCalculator import generate_trajectory
+from utils import *
 
 CONFIG_FILE = "config.yml"
-control_driver_class = ControlDrivers.SIM.value
+driver_class = ControlDrivers.SIM.value
 
 
 def generate_trajectory_process(
@@ -29,19 +28,19 @@ def generate_trajectory_process(
 ) -> None:
     """Calcule périodiquement les buffers de commandes pour atteindre la cible.
 
-    Lit la cible depuis `shared_target_position` et la position du robot depuis Redis,
-    puis écrit les buffers partagés (forward / translate / rotate).
+    Lit la position du robot depuis le driver et écrit les buffers partagés
+    (forward / translate / rotate) qui seront appliqués par rc_control_process.
     """
     config = Config.load_for_yml(CONFIG_FILE)
 
-    control_driver: Driver = control_driver_class(config, logger, ProcessNames.TRAJECTORY_CALCULATOR)
+    driver: Driver = driver_class(config, logger, ProcessNames.TRAJECTORY_CALCULATOR)
 
     # Historique des positions passées pour mesurer la vitesse (heuristique d'inertie)
     position_history: deque[PreviousPosition] = deque(maxlen=config.others.previous_position_buffer_len)
 
     def terminate() -> None:
         stop_event.set()
-        control_driver.stop()
+        driver.stop()
 
     # noinspection PyBroadException
     try:
@@ -50,12 +49,12 @@ def generate_trajectory_process(
 
             sim_points: list[SimPoint] = []
 
-            target_position = control_driver.get_target_position()
+            target_position = driver.get_target_position()
             logger.log(repr(target_position), ProcessNames.RC_CONTROL, LoggingLevel.DEBUG)
-            if not control_driver.as_target():
+            if not driver.has_target():
                 continue
 
-            robot_position = control_driver.get_robot_position()
+            robot_position = driver.get_robot_position()
             current_time = time.time()
 
             # Calcul du delta de temps et de la position de référence pour mesurer la vitesse
@@ -103,8 +102,6 @@ def rc_control_process(
     stop_event: MpEvent,
     process_exit_code: ValueProxy[int],
     logger: LoggerAPI,
-    shared_target_position: DictProxy[str, Optional[float]],
-    target_position_lock: MpLock,
     forward_command_buffer: SharedCommandBuffer,
     translate_command_buffer: SharedCommandBuffer,
     rotate_command_buffer: SharedCommandBuffer,
@@ -112,17 +109,15 @@ def rc_control_process(
     command_buffers_lock: MpLock,
     shared_sim_points_lock: MpLock,
 ) -> None:
-    """Applique les buffers de commandes au robot (simulateur ou matériel réel).
+    """Applique les buffers de commandes au robot à chaque tick.
 
-    Lit les buffers partagés, exécute la commande courante à chaque tick RC
-    et publie la nouvelle position dans Redis.
+    Lit les buffers partagés, récupère la commande courante via rc_control(),
+    l'applique via le driver, puis met à jour la position du robot.
     """
-    from simulateur import Sim
 
     config = Config.load_for_yml(CONFIG_FILE)
 
-    control_driver: Driver = control_driver_class(config, logger, ProcessNames.RC_CONTROL)
-
+    driver: Driver = driver_class(config, logger, ProcessNames.RC_CONTROL)
     # Capture initiale des buffers pour détecter les changements de consigne
     with command_buffers_lock:
         previous_buffers = AllCommandBuffers(
@@ -135,26 +130,26 @@ def rc_control_process(
 
     def terminate() -> None:
         stop_event.set()
-        control_driver.stop()
+        driver.stop()
 
     # noinspection PyBroadException
     try:
-        running = control_driver.send_command(Command(0, 0, 0))
+        running = driver.send_command(Command(0, 0, 0))
         while not stop_event.is_set():
             time.sleep(0.01)  # tick RC à ~100 Hz
 
             with shared_sim_points_lock:
                 sim_points = copy.deepcopy(list(shared_sim_points))
 
-            control_driver.add_all_sim_points(sim_points)
+            driver.add_all_sim_points(sim_points)
 
             if not running:
                 terminate()
                 break
 
-            if not control_driver.as_target():
+            if not driver.has_target():
                 # Pas de cible : arrêt progressif via l'inertie
-                running = control_driver.send_command(Command(0, 0, 0))
+                running = driver.send_command(Command(0, 0, 0))
                 continue
 
             with command_buffers_lock:
@@ -174,7 +169,7 @@ def rc_control_process(
                 ProcessNames.RC_CONTROL,
                 current_buffers,
                 buffer_start_time,
-                control_driver
+                driver
             )
 
         terminate()
@@ -202,17 +197,12 @@ if __name__ == "__main__":
 
     process_exit_code = manager.Value("i", 0)
 
-    shared_target_position: DictProxy[str, Optional[float]] = manager.dict()
-    shared_target_position.clear()
-    shared_target_position.update({"x": None, "y": None, "direction": None})
-
     forward_command_buffer: SharedCommandBuffer = manager.list()
     translate_command_buffer: SharedCommandBuffer = manager.list()
     rotate_command_buffer: SharedCommandBuffer = manager.list()
     shared_sim_points: ListProxy[SimPoint] = manager.list()
 
     command_buffers_lock = mp.Lock()
-    target_position_lock = mp.Lock()
     shared_sim_points_lock = mp.Lock()
 
     logger.log("Manager et variables partagées initialisés.", process=ProcessNames.MAIN, level=LoggingLevel.INFO)
@@ -233,7 +223,6 @@ if __name__ == "__main__":
         target=rc_control_process,
         args=(
             stop_event, process_exit_code, logger,
-            shared_target_position, target_position_lock,
             forward_command_buffer, translate_command_buffer, rotate_command_buffer,
             shared_sim_points, command_buffers_lock, shared_sim_points_lock,
         ),

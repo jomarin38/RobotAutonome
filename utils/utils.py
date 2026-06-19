@@ -2,38 +2,32 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import socket
-import subprocess
+import multiprocessing as mp
 import sys
 import threading
 import time
 import traceback
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict, field, astuple
+from dataclasses import dataclass, asdict, astuple
 from enum import Enum
-import multiprocessing as mp
-from functools import singledispatch, singledispatchmethod
+from functools import singledispatchmethod
 from io import TextIOWrapper
-from multiprocessing.managers import DictProxy, ListProxy
-from multiprocessing.synchronize import Event as MpEvent
-from multiprocessing.synchronize import Lock as MpLock
+from multiprocessing.managers import ListProxy
 from multiprocessing.queues import Queue as MpQueue
-from typing import Optional, Callable, TYPE_CHECKING, Any, TypedDict, TypeVar, cast, Protocol, Literal, override
+from multiprocessing.synchronize import Event as MpEvent
+from pprint import pformat
+from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
 
 import colorama
-from bleak import BleakClient
-from redis import Redis, StrictRedis
-
 import serial
+from bleak import BleakClient
+from colorama import init
+from pygments import highlight
+from pygments.formatters import TerminalFormatter
+from pygments.lexers import PythonTracebackLexer
+from redis import StrictRedis
 from serial import Serial
 
-from pprint import pformat
-
-from pygments import highlight
-from pygments.lexers import PythonTracebackLexer
-from pygments.formatters import TerminalFormatter
-
-from colorama import init
 init()  # IMPORTANT pour Windows CMD
 
 if TYPE_CHECKING:
@@ -42,11 +36,6 @@ if TYPE_CHECKING:
 from .config_manager import *
 
 # ============================================================================
-# VARIABLES GLOBALES
-# ============================================================================
-
-serial_bus: Optional[Serial] = None
-
 # ============================================================================
 # ÉNUMÉRATIONS
 # ============================================================================
@@ -171,6 +160,12 @@ class AllCommandBuffers(DataClassUtils):
 
 
 class Driver(ABC):
+    """Classe abstraite pour gérer la communication avec le robot/simulateur.
+
+    Les méthodes disponibles dépendent du processus appelant (trajectory ou RC control).
+    Les méthodes conditionnelles sont assignées dans __init__ ; appeler une méthode
+    non assignée pour le processus actuel lèvera AttributeError immédiatement.
+    """
     def __init__(self, config: Config, logger: LoggerAPI, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
         self.config = config
         self.logger = logger
@@ -189,6 +184,11 @@ class Driver(ABC):
                 self.get_target_position = self._get_target_position
 
     def _get_target_position(self) -> Position:
+        """Récupère la position cible depuis Redis.
+
+        Returns:
+            Position avec x, y, direction (peut contenir None si cible non définie).
+        """
         x = float(self.redis.get("target_x")) if self.redis.get("target_x") is not None else None
         y = float(self.redis.get("target_y")) if self.redis.get("target_y") is not None else None
         direction = float(self.redis.get("target_direction")) if self.redis.get("target_direction") is not None else None
@@ -208,11 +208,13 @@ class Driver(ABC):
 
         return Position(x=float(raw_x), y=float(raw_y), direction=float(raw_direction))
 
-    def stop(self):
+    def stop(self) -> None:
+        """Arrête le driver : flush Redis et ferme la connexion."""
         self.redis.flushdb()
         self.redis.close()
 
-    def as_target(self):
+    def has_target(self) -> bool:
+        """Vérifie si une cible est définie et accessible."""
         return self._get_target_position().x is not None
 
     def _add_sim_point(self, point: SimPoint) -> None: ...
@@ -281,6 +283,7 @@ class SerialDriver(Driver):
     @override
     def _send_command(self, command: Command) -> bool:
         self.serial_bus.write(f"{command.forward} {command.rotate} {command.translate}\n".encode())
+        return True
 
 
 class I2CDriver(Driver):

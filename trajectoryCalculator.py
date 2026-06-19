@@ -1,6 +1,6 @@
 from numba import njit  # type: ignore[import-untyped]
+
 from utils import *
-from math import log, ceil
 
 debug = False
 
@@ -71,16 +71,16 @@ def compute_trajectory_core(
     Calcule les vitesses, durées et deltas d'inertie pour les axes forward et translate.
 
     Retour (dans l'ordre) :
-        abs_dx, abs_dy           : distances absolues à la cible
-        forward_duration         : durée du buffer forward (s)
-        translate_duration       : durée du buffer translate (s)
-        forward_command_speed    : vitesse de consigne forward
-        translate_command_speed  : vitesse de consigne translate
-        x_coast_delta            : delta inertie signé sur l'axe X
-        y_coast_delta            : delta inertie signé sur l'axe Y
-        x_dir                    : signe de la direction vers la cible en X (+1 / -1)
-        y_dir                    : signe de la direction vers la cible en Y (+1 / -1)
-        logs                     : liste de messages de debug (None = pas de message)
+        abs_dx, abs_dy              : distances absolues à la cible
+        forward_finish_time         : temps de fin pour le buffer forward (s)
+        translate_finish_time       : temps de fin pour le buffer translate (s)
+        forward_command_speed       : vitesse de consigne forward
+        translate_command_speed     : vitesse de consigne translate
+        x_coast_delta               : delta inertie signé sur l'axe X
+        y_coast_delta               : delta inertie signé sur l'axe Y
+        x_dir                       : signe de la direction vers la cible en X (+1 / -1)
+        y_dir                       : signe de la direction vers la cible en Y (+1 / -1)
+        logs                        : liste de messages de debug (None = pas de message)
     """
     logs: list[Optional[Any]] = [None]
 
@@ -89,10 +89,10 @@ def compute_trajectory_core(
 
     # Vitesse proportionnelle à la distance pour éviter le dépassement au dernier tick
     translate_command_speed = min(MAX_TRANSLATE_SPEED, abs(dx) * translate_scale / tick_interval)
-    translate_duration = abs(dx) / translate_command_speed * translate_scale
+    translate_finish_time = abs(dx) / translate_command_speed * translate_scale
 
     forward_command_speed = min(MAX_FORWARD_SPEED, abs(dy) * forward_scale / tick_interval)
-    forward_duration = abs(dy) / forward_command_speed * forward_scale
+    forward_finish_time = abs(dy) / forward_command_speed * forward_scale
 
     # Signe de direction vers la cible sur chaque axe
     x_dir = dx / max(abs(dx), 1e-4)
@@ -105,8 +105,8 @@ def compute_trajectory_core(
     return (
         abs(dx),
         abs(dy),
-        forward_duration,
-        translate_duration,
+        forward_finish_time,
+        translate_finish_time,
         forward_command_speed,
         translate_command_speed,
         x_coast_delta,
@@ -142,8 +142,8 @@ def generate_trajectory(
     (
         abs_dx,
         abs_dy,
-        forward_duration,
-        translate_duration,
+        forward_finish_time,
+        translate_finish_time,
         forward_command_speed,
         translate_command_speed,
         x_coast_delta,
@@ -187,14 +187,14 @@ def generate_trajectory(
     # Axe X : pousser tant que l'inertie ne suffit pas à atteindre la cible
     if x_coast_delta > 0:
         translate_buffer.append(CommandBufferItem(
-            finish_time=translate_duration,
+            finish_time=translate_finish_time,
             command=translate_command_speed * x_dir,
         ))
 
     # Axe Y : même logique
     if y_coast_delta > 0:
         forward_buffer.append(CommandBufferItem(
-            finish_time=forward_duration,
+            finish_time=forward_finish_time,
             command=forward_command_speed * y_dir,
         ))
 

@@ -1,10 +1,12 @@
 import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
-import pygame
+
 import math
 from pathlib import Path
+
+import pygame
+
 from utils import *
-from typing import Optional, cast
 
 
 class Robot(pygame.sprite.Sprite):
@@ -17,7 +19,7 @@ class Robot(pygame.sprite.Sprite):
         self,
         x: float,
         y: float,
-        angle: float,
+        direction: float,
         forward_scale: float,
         translate_scale: float,
         rotate_scale: float,
@@ -27,7 +29,7 @@ class Robot(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
 
         self.rect.center = (int(x), int(y))
-        self.angle = angle
+        self.direction = direction
         self.original_image = self.image
         self.x: float = float(self.rect.centerx)
         self.y: float = float(self.rect.centery)
@@ -38,27 +40,27 @@ class Robot(pygame.sprite.Sprite):
     def rotate(self, speed: float, dt: float = 1.0) -> None:
         """Applique une rotation proportionnelle au temps écoulé."""
         old_center = self.rect.center
-        self.angle += speed * dt / self.rotate_scale
-        self.angle %= 360
-        self.image = pygame.transform.rotate(self.original_image, -self.angle)
+        self.direction += speed * dt / self.rotate_scale
+        self.direction %= 360
+        self.image = pygame.transform.rotate(self.original_image, -self.direction)
         self.rect = self.image.get_rect()
         self.rect.center = old_center
 
     def move(self, speed: float, translate: bool = False, dt: float = 1.0) -> None:
         """Déplace le robot selon son cap ou en translation latérale."""
-        angle_rad = math.radians(self.angle + (translate * 90))
+        angle_rad = math.radians(self.direction + (translate * 90))
         delta_x = speed * math.cos(angle_rad)
         delta_y = speed * math.sin(angle_rad)
         self.x += delta_x * dt / self.translate_scale
         self.y += delta_y * dt / self.forward_scale
         self.rect.center = (int(self.x), int(self.y))
 
-    def set_pos(self, x: float, y: float, angle: float) -> None:
+    def set_pos(self, x: float, y: float, direction: float) -> None:
         """Téléporte le robot à une position et un angle donnés."""
         self.x = x
         self.y = y
-        self.angle = angle
-        self.image = pygame.transform.rotate(self.original_image, -self.angle)
+        self.direction = direction
+        self.image = pygame.transform.rotate(self.original_image, -self.direction)
         self.rect = self.image.get_rect()
         self.rect.center = (int(self.x), int(self.y))
 
@@ -95,7 +97,7 @@ class Sim:
         self.font = pygame.font.Font(None, 36)
         self.clock = pygame.time.Clock()
         self.running = True
-        self.tick_rate = tick_rate
+        self._tick_rate = tick_rate
 
         self.forward_scale = forward_scale
         self.translate_scale = translate_scale
@@ -166,18 +168,10 @@ class Sim:
             robot_position=Position(
                 float(self.robot.x),
                 float(self.robot.y),
-                float(self.robot.angle),
+                float(self.robot.direction),
             ),
             target_position=self.target_position,
         )
-
-    @property
-    def tick_rate(self) -> int:
-        return self._tick_rate
-
-    @tick_rate.setter
-    def tick_rate(self, tick_rate: int) -> None:
-        self._tick_rate = tick_rate
 
     def get_dt(self) -> float:
         """Retourne le temps écoulé depuis le dernier appel (secondes réelles)."""
@@ -219,7 +213,7 @@ class Sim:
         if self.redis is not None:
             self.redis.set('robot_x', self.robot.x)
             self.redis.set('robot_y', self.robot.y)
-            self.redis.set('robot_direction', self.robot.angle)
+            self.redis.set('robot_direction', self.robot.direction)
 
         return result, self.get_observation()
 
@@ -280,15 +274,15 @@ class Sim:
         # Affichage des coordonnées du robot avec une ligne de repère
         x_label_robot = self.font.render(f"x: {int(self.robot.x)}", True, (0, 0, 0))
         y_label_robot = self.font.render(f"y: {int(self.robot.y)}", True, (0, 0, 0))
-        angle_label_robot = self.font.render(f"α: {int(self.robot.angle)}", True, (0, 0, 0))
+        direction_label_robot = self.font.render(f"α: {int(self.robot.direction)}", True, (0, 0, 0))
         self.window.blit(x_label_robot, (self.robot.x - 100, self.robot.y - 130))
         self.window.blit(y_label_robot, (self.robot.x - 100, self.robot.y - 105))
-        self.window.blit(angle_label_robot, (self.robot.x - 100, self.robot.y - 80))
+        self.window.blit(direction_label_robot, (self.robot.x - 100, self.robot.y - 80))
 
         pygame.draw.circle(self.window, (50, 50, 50), (self.robot.x, self.robot.y), 8)
         pygame.draw.line(self.window, (50, 50, 50), (self.robot.x, self.robot.y), (self.robot.x, self.robot.y - 20), 5)
         pygame.draw.line(self.window, (50, 50, 50), (self.robot.x, self.robot.y - 20), (self.robot.x - 30, self.robot.y - 50), 5)
-        label_width = max(x_label_robot.get_width(), y_label_robot.get_width(), angle_label_robot.get_width())
+        label_width = max(x_label_robot.get_width(), y_label_robot.get_width(), direction_label_robot.get_width())
         pygame.draw.line(self.window, (50, 50, 50), (self.robot.x - 30, self.robot.y - 50), (self.robot.x - 30 - label_width, self.robot.y - 50), 5)
 
         # Dessin de la cible (cercle rouge + coordonnées)

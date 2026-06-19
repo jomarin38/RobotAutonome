@@ -8,10 +8,21 @@ def get_active_command(
     current_time: float,
     buffer_start_time: float,
 ) -> float:
-    """Retourne la consigne courante depuis un buffer temporel.
+    """Retourne la consigne courante depuis un buffer temporel (récursif).
 
-    Consomme (pop) les items dont le temps de fin est dépassé, puis retourne
-    la valeur du premier item encore actif. Retourne 0 si le buffer est vide.
+    Consomme (pop) les items dont le temps de fin (finish_time) est dépassé par rapport
+    au temps courant, puis retourne la valeur du premier item encore actif.
+    Retourne 0.0 si le buffer est vide ou tous les items sont expirés.
+
+    Args:
+        logger: API de logging.
+        process_name: Nom du processus appelant.
+        buffer: Buffer temporel de commandes.
+        current_time: Temps courant (en secondes).
+        buffer_start_time: Temps auquel le buffer a commencé à être appliqué.
+
+    Returns:
+        La valeur de commande du premier item actif, ou 0.0.
     """
     if len(buffer) == 0:
         return 0.0
@@ -26,12 +37,12 @@ def rc_control(
     process_name: ProcessNames,
     command_buffers: AllCommandBuffers,
     buffer_start_time: float,
-    control_driver: Driver,
+    driver: Driver,
 ) -> bool:
     """Applique la commande courante de chaque axe au robot.
 
     Lit la consigne active dans chaque buffer (forward / translate / rotate) selon
-    l'horodatage, puis envoie la commande résultante via le handler de contrôle.
+    l'horodatage, puis envoie la commande résultante via le driver de contrôle.
 
     None sur un axe = buffer vide, l'inertie s'applique naturellement.
     """
@@ -51,7 +62,7 @@ def rc_control(
         if len(command_buffers.rotate) > 0 else None
     )
 
-    running = control_driver.send_command(
+    running = driver.send_command(
         Command(
             rotate=-rotate_command if rotate_command is not None else None,
             forward=forward_command,
