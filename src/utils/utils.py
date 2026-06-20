@@ -4,6 +4,7 @@ import asyncio
 import copy
 import inspect
 import multiprocessing as mp
+import platform
 import socket
 import struct
 import sys
@@ -31,7 +32,7 @@ from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
 from redis import StrictRedis
 from serial import Serial
-from smbus2 import SMBus, i2c_msg
+if platform.system() != "Windows": from smbus2 import SMBus, i2c_msg
 
 init()  # IMPORTANT pour Windows CMD
 
@@ -270,6 +271,7 @@ class SerialDriver(Driver):
 # noinspection PyMissingConstructor,PyUnusedLocal
 class I2CDriver(Driver):
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
+        if platform.system() == "Windows": raise NotImplementedError("Le driver I2C n'est pas implémenté pour windows.")
         super().__init__(config, process_name)
 
     @override
@@ -344,7 +346,7 @@ class LoggerUtils:
 # METHODES POUR LE LOGGER
 # ============================================================================
 
-def bind_context(record):
+def bind_context(record: Record):
     file = record["file"].name
     line = record["line"]
     func = record["function"]
