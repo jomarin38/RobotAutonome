@@ -122,6 +122,9 @@ class Command(DataClassUtils):
     translate: Optional[float]
     rotate: Optional[float]
 
+    def __bytes__(self) -> bytes:
+        return struct.pack(">hhh", *self.astuple())
+
 
 @dataclass(frozen=True)
 class CommandBufferItem(DataClassUtils):
@@ -256,30 +259,39 @@ class SerialDriver(Driver):
         super().__init__(config, process_name)
 
         # noinspection PyCallingNonCallable
-        logger.info("Initializing serial bus...")
-        self.serial_bus = Serial(port=config.serial.port_name, baudrate=config.serial.baud_rate, parity=serial.PARITY_NONE,
-                            stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=config.serial.timeout)
-        # noinspection PyCallingNonCallable
-        logger.info("Serial bus initialized !")
+        if process_name == ProcessNames.RC_CONTROL:
+            logger.info("Initializing serial bus...")
+            self.serial_bus = Serial(port=config.serial.port_name, baudrate=config.serial.baud_rate, parity=serial.PARITY_NONE,
+                                stopbits=serial.STOPBITS_ONE, bytesize=serial.EIGHTBITS, timeout=config.serial.timeout)
+            # noinspection PyCallingNonCallable
+            logger.info("Serial bus initialized !")
 
     @override
     def _send_command(self, command: Command) -> bool:
-        self.serial_bus.write(struct.pack(">hhh", *command.astuple()))
+        self.serial_bus.write(bytes(command))
         return True
 
+    @override
+    def stop(self):
+        super().stop()
+        self.serial_bus.close()
 
-# noinspection PyMissingConstructor,PyUnusedLocal
+
 class I2CDriver(Driver):
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         if platform.system() == "Windows": raise NotImplementedError("Le driver I2C n'est pas implémenté pour windows.")
         super().__init__(config, process_name)
+        if process_name == ProcessNames.RC_CONTROL: self.i2c_bus = SMBus(self.config.i2c.bus)
 
     @override
     def _send_command(self, command: Command) -> bool:
-        with SMBus(self.config.i2c.bus) as bus:
-            msg = i2c_msg.write(self.config.i2c.address, struct.pack(">hhh", *command.astuple()))
-            bus.i2c_rdwr(msg)
+        self.i2c_bus.i2c_rdwr(i2c_msg.write(self.config.i2c.address, bytes(command)))
         return True
+
+    @override
+    def stop(self) -> None:
+        super().stop()
+        self.i2c_bus.close()
 
 
 class BluetoothDriver(Driver):
@@ -287,34 +299,42 @@ class BluetoothDriver(Driver):
         super().__init__(config, process_name)
 
         if process_name == ProcessNames.RC_CONTROL:
-            self._loop = asyncio.new_event_loop()
-            self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+            self.loop = asyncio.new_event_loop()
+            self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+            self.client = BleakClient(self.config.bluetooth.address)
 
     @override
     def _send_command(self, command: Command) -> bool:
-        asyncio.run_coroutine_threadsafe(self._send_ble(command), self._loop)
+        asyncio.run_coroutine_threadsafe(self._send_ble(command), self.loop)
         return True
 
     async def _send_ble(self, command: Command):
-        async with BleakClient(self.config.bluetooth.address) as client:
-            await client.write_gatt_char(self.config.bluetooth.char_uuid, struct.pack(">hhh", *command.astuple()))
+        await self.client.write_gatt_char(self.config.bluetooth.char_uuid, bytes(command))
+
+    @override
+    def stop(self) -> None:
+        super().stop()
+        self.client.disconnect()
+        self.loop.stop()
+        self.thread.join()
 
 
-# noinspection PyMissingConstructor,PyUnusedLocal
 class WifiDriver(Driver):
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 
-        self.tcp_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcp_client.connect((self.config.wifi.host, config.wifi.port))
+        if process_name == ProcessNames.RC_CONTROL:
+            self.tcp_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.tcp_client.connect((self.config.wifi.host, config.wifi.port))
 
     @override
     def _send_command(self, command: Command) -> bool:
-        self.tcp_client.sendall(struct.pack(">hhh", *command.astuple()))
+        self.tcp_client.sendall(bytes(command))
         return True
 
     @override
     def stop(self) -> None:
+        super().stop()
         self.tcp_client.shutdown(socket.SHUT_RDWR)
 
 
