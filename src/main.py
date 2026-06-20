@@ -1,9 +1,16 @@
+from src import *
+
+import sys
+import time
 from collections import deque
+import multiprocessing as mp
 from multiprocessing.managers import ListProxy, DictProxy, ValueProxy  # type: ignore
 from multiprocessing.synchronize import Lock as MpLock
+from multiprocessing.synchronize import Event as MpEvent
 from pathlib import Path
 from loguru import logger
 
+from .drivers import *
 from .rcControl import rc_control
 from .trajectoryCalculator import generate_trajectory
 from .utils import *
@@ -54,7 +61,7 @@ def generate_trajectory_process(
 ) -> None:
     """Calcule périodiquement les buffers de commandes pour atteindre la cible.
 
-    Lit la position du robot depuis le driver et écrit les buffers partagés
+    Lit la position du robot depuis le drivers et écrit les buffers partagés
     (forward / translate / rotate) qui seront appliqués par rc_control_process.
     """
     config = Config.load_for_yml(CONFIG_FILE)
@@ -134,7 +141,7 @@ def rc_control_process(
     """Applique les buffers de commandes au robot à chaque tick.
 
     Lit les buffers partagés, récupère la commande courante via rc_control(),
-    l'applique via le driver, puis met à jour la position du robot.
+    l'applique via le drivers, puis met à jour la position du robot.
     """
 
     config = Config.load_for_yml(CONFIG_FILE)

@@ -1,7 +1,7 @@
+from src import *
+
 from loguru import logger
 from numba import njit  # type: ignore[import-untyped]
-
-from .utils import *
 
 debug = False
 

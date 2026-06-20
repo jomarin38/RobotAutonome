@@ -1,4 +1,8 @@
-from .utils import *
+from src import *
+
+import time
+
+from .drivers import *
 
 
 def get_active_command(
@@ -39,7 +43,7 @@ def rc_control(
     """Applique la commande courante de chaque axe au robot.
 
     Lit la consigne active dans chaque buffer (forward / translate / rotate) selon
-    l'horodatage, puis envoie la commande résultante via le driver de contrôle.
+    l'horodatage, puis envoie la commande résultante via le drivers de contrôle.
 
     None sur un axe = buffer vide, l'inertie s'applique naturellement.
     """

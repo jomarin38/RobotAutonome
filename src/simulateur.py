@@ -1,12 +1,14 @@
+from src import *
+
 import os
+import time
+
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import math
 from pathlib import Path
 
 import pygame
-
-from .utils import *
 
 class RobotBase(ABC):
     x: float
