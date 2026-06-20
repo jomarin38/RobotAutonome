@@ -18,6 +18,7 @@ dependencies = [
     "pygments>=2.20.0,<3.0.0",
     "bleak>=3.0.2,<4.0.0",
     "loguru>=0.7.3",
+    "smbus2>=0.6.1",
 ]
 
 # Poetry : ne pas installer le projet lui-même

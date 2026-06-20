@@ -4,6 +4,8 @@ import asyncio
 import copy
 import inspect
 import multiprocessing as mp
+import socket
+import struct
 import sys
 import threading
 import time
@@ -29,6 +31,7 @@ from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
 from redis import StrictRedis
 from serial import Serial
+from smbus2 import SMBus, i2c_msg
 
 init()  # IMPORTANT pour Windows CMD
 
@@ -141,7 +144,7 @@ class Driver(ABC):
     Les méthodes conditionnelles sont assignées dans __init__ ; appeler une méthode
     non assignée pour le processus actuel lèvera AttributeError immédiatement.
     """
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         self.config = config
         self.process_name = process_name
         self.logger = logger.bind(cls=self.__class__.__name__)
@@ -202,7 +205,7 @@ class Driver(ABC):
 
 
 class SimDriver(Driver):
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 
         from src.simulateur import Sim
@@ -248,7 +251,7 @@ class SimDriver(Driver):
 
 
 class SerialDriver(Driver):
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 
         # noinspection PyCallingNonCallable
@@ -260,26 +263,25 @@ class SerialDriver(Driver):
 
     @override
     def _send_command(self, command: Command) -> bool:
-        self.serial_bus.write(f"{command.forward} {command.rotate} {command.translate}\n".encode())
+        self.serial_bus.write(struct.pack(">hhh", *command.astuple()))
         return True
 
 
 # noinspection PyMissingConstructor,PyUnusedLocal
 class I2CDriver(Driver):
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
-        raise NotImplementedError("I2CDriver is not implemented yet")
-
-    @override
-    def _get_target_position(self) -> Position:
-        raise NotImplementedError("I2CDriver::_get_target_position is not implemented yet")
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
+        super().__init__(config, process_name)
 
     @override
     def _send_command(self, command: Command) -> bool:
-        raise NotImplementedError("I2CDriver::_send_command is not implemented yet")
+        with SMBus(self.config.i2c.bus) as bus:
+            msg = i2c_msg.write(self.config.i2c.address, struct.pack(">hhh", *command.astuple()))
+            bus.i2c_rdwr(msg)
+        return True
 
 
 class BluetoothDriver(Driver):
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 
         if process_name == ProcessNames.RC_CONTROL:
@@ -293,21 +295,25 @@ class BluetoothDriver(Driver):
 
     async def _send_ble(self, command: Command):
         async with BleakClient(self.config.bluetooth.address) as client:
-            await client.write_gatt_char(self.config.bluetooth.char_uuid, f"{command.forward};{command.translate};{command.rotate}".encode())
+            await client.write_gatt_char(self.config.bluetooth.char_uuid, struct.pack(">hhh", *command.astuple()))
 
 
 # noinspection PyMissingConstructor,PyUnusedLocal
 class WifiDriver(Driver):
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR] | Literal[ProcessNames.RC_CONTROL]):
-        raise NotImplementedError("WifiDriver is not implemented yet")
+    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
+        super().__init__(config, process_name)
 
-    @override
-    def _get_target_position(self) -> Position:
-        raise NotImplementedError("WifiDriver::_get_target_position is not implemented yet")
+        self.tcp_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcp_client.connect((self.config.wifi.host, config.wifi.port))
 
     @override
     def _send_command(self, command: Command) -> bool:
-        raise NotImplementedError("WifiDriver::_send_command is not implemented yet")
+        self.tcp_client.sendall(struct.pack(">hhh", *command.astuple()))
+        return True
+
+    @override
+    def stop(self) -> None:
+        self.tcp_client.shutdown(socket.SHUT_RDWR)
 
 
 class Drivers(Enum):

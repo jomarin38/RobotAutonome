@@ -16,9 +16,19 @@ class SerialConfig(BaseModel):
     timeout: float
 
 
+class I2CConfig(BaseModel):
+    bus: int
+    address: int
+
+
 class BluetoothConfig(BaseModel):
     address: str
     char_uuid: str
+
+
+class WifiConfig(BaseModel):
+    host: str
+    port: int
 
 
 class SimWindowConfig(BaseModel):
@@ -67,7 +77,9 @@ class OthersConfig(BaseModel):
 class Config(BaseModel):
     redis: RedisConfig
     serial: SerialConfig
+    i2c: I2CConfig
     bluetooth: BluetoothConfig
+    wifi: WifiConfig
     sim: SimConfig
     movement_coeff: MovementCoeffConfig
     inertia_factor: InertiaFactorConfig
