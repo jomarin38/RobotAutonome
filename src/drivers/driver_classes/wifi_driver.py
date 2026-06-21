@@ -24,3 +24,4 @@ class WifiDriver(Driver):
     def stop(self) -> None:
         super().stop()
         self.tcp_client.shutdown(socket.SHUT_RDWR)
+        self.tcp_client.close()
