@@ -61,7 +61,6 @@ class Driver(ABC):
 
     def stop(self) -> None:
         """Arrête le driver : flush Redis et ferme la connexion."""
-        self.redis.flushdb()
         self.redis.close()
 
     def has_target(self) -> bool:

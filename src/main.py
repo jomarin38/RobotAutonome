@@ -86,6 +86,14 @@ def main() -> None:
     except KeyboardInterrupt:
         stop_event.set()
         process_exit_code.set(0)
+        trajectory_calculator_process.join()
+        rc_control_process.join()
+
+    config = Config.load_from_yml(CONFIG_FILE)
+    redis = StrictRedis(host=config.redis.host, port=config.redis.port, db=config.redis.db,
+                                 decode_responses=True)
+    redis.flushdb()
+    redis.close()
 
     if process_exit_code.value == 0:
         logger.info("Arrêt du programme.")
