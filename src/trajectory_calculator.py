@@ -130,10 +130,12 @@ class TrajectoryCalculatorProcess(RobotProcess):
         self._current_time = time.time()
         self._sim_points: list[SimPoint] = []
 
+    @override
     @property
     def process_name(self) -> ProcessNames:
         return ProcessNames.TRAJECTORY_CALCULATOR
 
+    @override
     @property
     def exit_code_on_error(self) -> int:
         return 1
@@ -253,10 +255,12 @@ class TrajectoryCalculatorProcess(RobotProcess):
 
         return AllCommandBuffers(forward=forward_buffer, translate=translate_buffer, rotate=rotate_buffer)
 
+    @override
     def stop(self) -> None:
         self.shared.stop_event.set()
         self.driver.stop()
 
+    @override
     def _run_impl(self) -> None:
         while not self.shared.stop_event.is_set():
             time.sleep(0.02)

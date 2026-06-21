@@ -39,10 +39,12 @@ class RCControlProcess(RobotProcess):
     def current_buffers(self, buffers: AllCommandBuffers) -> None:
         self._current_buffers = buffers
 
+    @override
     @property
     def process_name(self) -> ProcessNames:
         return ProcessNames.RC_CONTROL
 
+    @override
     @property
     def exit_code_on_error(self) -> int:
         return 2
@@ -97,10 +99,12 @@ class RCControlProcess(RobotProcess):
             self._buffer_start_time = time.time()
             self.previous_buffers = self.current_buffers.copy(use_deepcopy=True)
 
+    @override
     def stop(self) -> None:
         self.shared.stop_event.set()
         self.driver.stop()
 
+    @override
     def _run_impl(self) -> None:
         self._initialize_buffers()
         running = self.driver.send_command(Command(None, None, None))
