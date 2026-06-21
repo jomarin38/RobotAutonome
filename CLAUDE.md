@@ -28,21 +28,64 @@ There are no tests at this time.
 
 ## Custom Skills
 
-Custom skills are available for code quality analysis. Invoke them with `/skill-name` in the chat:
+### Manual Invocation Skills
+Invoke with `/skill-name` in the chat:
 
+**Code Quality & Audits**
 ```
-/cc-audit-structure [--fix]    # Audit structure, naming, order, comments, dead code, user strings
+/cc-audit-structure [--fix]    # Audit structure, naming, order, comments, dead code
 /cc-audit-bugs [--fix]         # Detect bugs and generate categorized report
 /cc-audit-full [--fix]         # Complete audit (structure + bugs + report)
 ```
 
-Add `--fix` flag to automatically apply corrections found during audits.
+**Documentation**
+```
+/doc-writer [--update]         # Write/update project documentation and docstrings
+/readme-writer [--create]      # Write/update README.md with complete structure
+```
 
-### Custom Agents
+**Skill Authoring**
+```
+/skill-creator                 # Interactive guide to create skills and agents
+```
 
-- **structure-auditor** — Audits code coherence and structure
-- **bug-finder** — Detects bugs and logical flaws
-- **code-fixer** — Applies fixes from audit results
+### Auto-Invocation Skills
+Automatically invoked by Claude when needed:
+- `git-ops` — Git operations (merge, rebase, branch management)
+- `shell-exec` — Shell commands and scripts execution
+- `diagnose` — System monitoring and performance diagnostics
+- `devtools` — Package managers, build systems, CI/CD
+- `linux-terminal` — Coordinator for complex terminal workflows
+
+## Available Agents (14 agents)
+
+14 specialized agents for analysis and optimization tasks:
+
+### 🔍 Exploration
+- `explorer-global` — Project architecture overview
+- `explorer-precise` — Targeted code search
+
+### 🐍 Python & Performance
+- `python-optimizer` — Code optimization (algorithms, memory, I/O)
+- `python-refactorer` — Refactoring and maintainability
+- `python-type-expert` — Advanced typing (type hints, generics)
+- `performance-profiler` — Profiling, benchmarking
+
+### 🏗️ Architecture & API
+- `architecture-reviewer` — Architectural review (SOLID, patterns)
+- `api-designer` — REST/gRPC API design with OpenAPI
+
+### 🔒 Quality & Security
+- `security-auditor` — Security audit (OWASP Top 10)
+- `bug-finder` — Bug detection (logic, concurrency, resources)
+- `test-engineer` — Unit tests, coverage
+- `structure-auditor` — Code coherence audit
+
+### 📚 Documentation & Infrastructure
+- `documentation-writer` — Docstrings, guides, API documentation
+- `code-fixer` — Apply fixes from audit results
+
+Agents are parallelizable or perform subtasks completely different from the main task.
 
 ## Rules for Claude Code
 
