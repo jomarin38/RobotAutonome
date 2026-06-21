@@ -12,7 +12,7 @@ from loguru import logger
 
 from .drivers import *
 from .rc_control import RCControlProcess
-from .trajectory_calculator import generate_trajectory
+from .trajectory_calculator import TrajectoryCalculatorProcess
 from .utils import *
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
@@ -49,85 +49,6 @@ logger.add(
     level="DEBUG"
 )
 
-def generate_trajectory_process(
-    stop_event: MpEvent,
-    process_exit_code: ValueProxy[int],
-    forward_command_buffer: SharedCommandBuffer,
-    translate_command_buffer: SharedCommandBuffer,
-    rotate_command_buffer: SharedCommandBuffer,
-    shared_sim_points: ListProxy[SimPoint],
-    command_buffers_lock: MpLock,
-    shared_sim_points_lock: MpLock,
-) -> None:
-    """Calcule périodiquement les buffers de commandes pour atteindre la cible.
-
-    Lit la position du robot depuis le drivers et écrit les buffers partagés
-    (forward / translate / rotate) qui seront appliqués par rc_control_process.
-    """
-    config = Config.load_for_yml(CONFIG_FILE)
-
-    driver: Driver = driver_class(config, ProcessNames.TRAJECTORY_CALCULATOR)
-
-    # Historique des positions passées pour mesurer la vitesse (heuristique d'inertie)
-    position_history: deque[PreviousPosition] = deque(maxlen=config.others.previous_position_buffer_len)
-
-    def terminate() -> None:
-        stop_event.set()
-        driver.stop()
-
-    # noinspection PyBroadException
-    try:
-        while not stop_event.is_set():
-            time.sleep(0.02)  # limite le taux de recalcul (~50 Hz)
-
-            sim_points: list[SimPoint] = []
-
-            target_position = driver.get_target_position()
-            if not driver.has_target():
-                continue
-
-            robot_position = driver.get_robot_position()
-            current_time = time.time()
-
-            # Calcul du delta de temps et de la position de référence pour mesurer la vitesse
-            if len(position_history) >= config.others.previous_position_buffer_len:
-                oldest_position_record = position_history.popleft()
-                previous_position = oldest_position_record.position
-                elapsed_time = current_time - oldest_position_record.timestamp
-            else:
-                previous_position = robot_position
-                elapsed_time = 0.0
-
-            command_buffers = generate_trajectory(
-                cast(Position, target_position),
-                previous_position,
-                elapsed_time,
-                robot_position,
-                config,
-                sim_points,
-            )
-
-            # Enregistre la position courante pour le prochain calcul de vitesse
-            position_history.append(PreviousPosition(position=robot_position, timestamp=current_time))
-
-            with command_buffers_lock:
-                forward_command_buffer[:] = command_buffers.forward
-                translate_command_buffer[:] = command_buffers.translate
-                rotate_command_buffer[:] = command_buffers.rotate
-
-            with shared_sim_points_lock:
-                shared_sim_points[:] = sim_points.copy()
-
-        terminate()
-
-    except KeyboardInterrupt:
-        terminate()
-    except BaseException as e:
-        logger.critical(LoggerUtils.format_traceback(e))
-        terminate()
-        process_exit_code.set(1)
-
-
 if __name__ == "__main__":
     config = Config.load_for_yml(CONFIG_FILE)
 
@@ -150,16 +71,12 @@ if __name__ == "__main__":
     logger.info("Manager et variables partagées initialisés.")
     logger.info("Lancement des processus...")
 
-    trajectory_process = mp.Process(
-        target=generate_trajectory_process,
-        args=(
-            stop_event, process_exit_code,
-            forward_command_buffer, translate_command_buffer, rotate_command_buffer,
-            shared_sim_points, command_buffers_lock, shared_sim_points_lock,
-        ),
-        daemon=True,
+    trajectory_calculator_process = TrajectoryCalculatorProcess(
+        stop_event, process_exit_code,
+        forward_command_buffer, translate_command_buffer, rotate_command_buffer,
+        shared_sim_points, command_buffers_lock, shared_sim_points_lock, CONFIG_FILE, driver_class
     )
-    trajectory_process.start()
+    trajectory_calculator_process.start()
 
     rc_control_process = RCControlProcess(
         stop_event, process_exit_code,
@@ -171,7 +88,7 @@ if __name__ == "__main__":
     logger.info("Processus lancés.")
 
     try:
-        trajectory_process.join()
+        trajectory_calculator_process.join()
         rc_control_process.join()
     except KeyboardInterrupt:
         stop_event.set()
