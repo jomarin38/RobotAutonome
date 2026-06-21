@@ -1,19 +1,15 @@
 from src import *
 
-import sys
-import time
-from collections import deque
 import multiprocessing as mp
-from multiprocessing.managers import ListProxy, DictProxy, ValueProxy  # type: ignore
-from multiprocessing.synchronize import Lock as MpLock
-from multiprocessing.synchronize import Event as MpEvent
+import sys
 from pathlib import Path
+
 from loguru import logger
 
-from .drivers import *
-from .rc_control import RCControlProcess
-from .trajectory_calculator import TrajectoryCalculatorProcess
-from .utils import *
+from src.drivers import Drivers
+from src.processes import ProcessConfig, SharedResources
+from src.rc_control import RCControlProcess
+from src.trajectory_calculator import TrajectoryCalculatorProcess
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
@@ -50,39 +46,36 @@ logger.add(
 )
 
 def main() -> None:
-    config = Config.load_for_yml(CONFIG_FILE)
-
-    stop_event = mp.Event()
-
     logger.info("Initialisation du manager et des variables partagées...")
 
     manager = mp.Manager()
 
+    stop_event = mp.Event()
     process_exit_code = manager.Value("i", 0)
 
-    forward_command_buffer: SharedCommandBuffer = manager.list()
-    translate_command_buffer: SharedCommandBuffer = manager.list()
-    rotate_command_buffer: SharedCommandBuffer = manager.list()
-    shared_sim_points: ListProxy[SimPoint] = manager.list()
+    shared_resources = SharedResources(
+        stop_event=stop_event,
+        process_exit_code=process_exit_code,
+        forward_command_buffer=manager.list(),
+        translate_command_buffer=manager.list(),
+        rotate_command_buffer=manager.list(),
+        shared_sim_points=manager.list(),
+        command_buffers_lock=mp.Lock(),
+        shared_sim_points_lock=mp.Lock(),
+    )
 
-    command_buffers_lock = mp.Lock()
-    shared_sim_points_lock = mp.Lock()
+    process_config = ProcessConfig(
+        config_file_path=CONFIG_FILE,
+        driver_class=driver_class,
+    )
 
     logger.info("Manager et variables partagées initialisés.")
     logger.info("Lancement des processus...")
 
-    trajectory_calculator_process = TrajectoryCalculatorProcess(
-        stop_event, process_exit_code,
-        forward_command_buffer, translate_command_buffer, rotate_command_buffer,
-        shared_sim_points, command_buffers_lock, shared_sim_points_lock, CONFIG_FILE, driver_class
-    )
+    trajectory_calculator_process = TrajectoryCalculatorProcess(shared_resources, process_config)
     trajectory_calculator_process.start()
 
-    rc_control_process = RCControlProcess(
-        stop_event, process_exit_code,
-        forward_command_buffer, translate_command_buffer, rotate_command_buffer,
-        shared_sim_points, command_buffers_lock, shared_sim_points_lock, CONFIG_FILE, driver_class
-    )
+    rc_control_process = RCControlProcess(shared_resources, process_config)
     rc_control_process.start()
 
     logger.info("Processus lancés.")
