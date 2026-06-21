@@ -88,10 +88,10 @@ def compute_trajectory_core(
     dx = x_target - x_pos
     dy = y_pos - y_target
 
-    translate_command_speed = min(MAX_TRANSLATE_SPEED, abs(dx) * translate_scale / tick_interval)
+    translate_command_speed = min(MAX_TRANSLATE_SPEED, max(abs(dx), 1e-4) * translate_scale / tick_interval)
     translate_finish_time = abs(dx) / translate_command_speed * translate_scale
 
-    forward_command_speed = min(MAX_FORWARD_SPEED, abs(dy) * forward_scale / tick_interval)
+    forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(dy), 1e-4) * forward_scale / tick_interval)
     forward_finish_time = abs(dy) / forward_command_speed * forward_scale
 
     x_dir = dx / max(abs(dx), 1e-4)
