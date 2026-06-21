@@ -29,8 +29,8 @@ class BluetoothDriver(Driver):
         await self.client.write_gatt_char(self.config.bluetooth.char_uuid, bytes(command))
 
     @override
-    def stop(self) -> None:
+    async def stop(self) -> None:
         super().stop()
-        self.client.disconnect()
+        await self.client.disconnect()
         self.loop.stop()
         self.thread.join()
