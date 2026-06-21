@@ -18,7 +18,7 @@ Python 3.13 autonomous robot control system for a robotics club. Supports both a
 uv run main.py
 
 # Type-check
-uv run mypy main.py simulateur.py trajectoryCalculator.py rcControl.py utils/
+uv run mypy main.py simulateur.py trajectory_calculator.py rc_control.py utils/
 
 # Install dependencies
 uv sync

@@ -11,8 +11,8 @@ from pathlib import Path
 from loguru import logger
 
 from .drivers import *
-from .rcControl import rc_control
-from .trajectoryCalculator import generate_trajectory
+from .rc_control import RCControlProcess
+from .trajectory_calculator import generate_trajectory
 from .utils import *
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
@@ -128,88 +128,6 @@ def generate_trajectory_process(
         process_exit_code.set(1)
 
 
-def rc_control_process(
-    stop_event: MpEvent,
-    process_exit_code: ValueProxy[int],
-    forward_command_buffer: SharedCommandBuffer,
-    translate_command_buffer: SharedCommandBuffer,
-    rotate_command_buffer: SharedCommandBuffer,
-    shared_sim_points: ListProxy[SimPoint],
-    command_buffers_lock: MpLock,
-    shared_sim_points_lock: MpLock,
-) -> None:
-    """Applique les buffers de commandes au robot à chaque tick.
-
-    Lit les buffers partagés, récupère la commande courante via rc_control(),
-    l'applique via le drivers, puis met à jour la position du robot.
-    """
-
-    config = Config.load_for_yml(CONFIG_FILE)
-
-    driver: Driver = driver_class(config, ProcessNames.RC_CONTROL)
-    # Capture initiale des buffers pour détecter les changements de consigne
-    with command_buffers_lock:
-        previous_buffers = AllCommandBuffers(
-            forward=copy.deepcopy(list(forward_command_buffer)),
-            translate=copy.deepcopy(list(translate_command_buffer)),
-            rotate=copy.deepcopy(list(rotate_command_buffer)),
-        )
-
-    buffer_start_time = time.time()
-
-    def terminate() -> None:
-        stop_event.set()
-        driver.stop()
-
-    # noinspection PyBroadException
-    try:
-        running = driver.send_command(Command(None, None, None))
-        while not stop_event.is_set():
-            time.sleep(0.01)  # tick RC à ~100 Hz
-
-            with shared_sim_points_lock:
-                sim_points = copy.deepcopy(list(shared_sim_points))
-
-            driver.add_all_sim_points(sim_points)
-
-            if not running:
-                terminate()
-                break
-
-            if not driver.has_target():
-                # Pas de cible : arrêt progressif via l'inertie
-                running = driver.send_command(Command(None, None, None))
-                continue
-
-            with command_buffers_lock:
-                current_buffers = AllCommandBuffers(
-                    forward=copy.deepcopy(list(forward_command_buffer)),
-                    translate=copy.deepcopy(list(translate_command_buffer)),
-                    rotate=copy.deepcopy(list(rotate_command_buffer)),
-                )
-
-            # Nouveaux buffers détectés → réinitialise l'horloge de lecture
-            if current_buffers != previous_buffers:
-                buffer_start_time = time.time()
-                previous_buffers = current_buffers.copy(use_deepcopy=True)
-
-            running = rc_control(
-                ProcessNames.RC_CONTROL,
-                current_buffers,
-                buffer_start_time,
-                driver
-            )
-
-        terminate()
-
-    except KeyboardInterrupt:
-        terminate()
-    except BaseException as e:
-        logger.critical(LoggerUtils.format_traceback(e))
-        terminate()
-        process_exit_code.set(2)
-
-
 if __name__ == "__main__":
     config = Config.load_for_yml(CONFIG_FILE)
 
@@ -243,22 +161,18 @@ if __name__ == "__main__":
     )
     trajectory_process.start()
 
-    rc_process = mp.Process(
-        target=rc_control_process,
-        args=(
-            stop_event, process_exit_code,
-            forward_command_buffer, translate_command_buffer, rotate_command_buffer,
-            shared_sim_points, command_buffers_lock, shared_sim_points_lock,
-        ),
-        daemon=True,
+    rc_control_process = RCControlProcess(
+        stop_event, process_exit_code,
+        forward_command_buffer, translate_command_buffer, rotate_command_buffer,
+        shared_sim_points, command_buffers_lock, shared_sim_points_lock, CONFIG_FILE, driver_class
     )
-    rc_process.start()
+    rc_control_process.start()
 
     logger.info("Processus lancés.")
 
     try:
         trajectory_process.join()
-        rc_process.join()
+        rc_control_process.join()
     except KeyboardInterrupt:
         stop_event.set()
         process_exit_code.set(0)
