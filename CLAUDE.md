@@ -26,6 +26,24 @@ uv sync
 
 There are no tests at this time.
 
+## Custom Skills
+
+Custom skills are available for code quality analysis. Invoke them with `/skill-name` in the chat:
+
+```
+/cc-audit-structure [--fix]    # Audit structure, naming, order, comments, dead code, user strings
+/cc-audit-bugs [--fix]         # Detect bugs and generate categorized report
+/cc-audit-full [--fix]         # Complete audit (structure + bugs + report)
+```
+
+Add `--fix` flag to automatically apply corrections found during audits.
+
+### Custom Agents
+
+- **structure-auditor** — Audits code coherence and structure
+- **bug-finder** — Detects bugs and logical flaws
+- **code-fixer** — Applies fixes from audit results
+
 ## Rules for Claude Code
 
 1. **Never commit without explicit authorization** — Always ask for permission before running `git commit`, `git push`, or any destructive git operations.
