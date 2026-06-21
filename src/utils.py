@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from src import *
 
-import asyncio
 import copy
-import platform
-import socket
 import struct
-import threading
 import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict, astuple
@@ -15,16 +11,12 @@ from enum import Enum
 from multiprocessing.managers import ListProxy
 from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
 
-import serial
-from bleak import BleakClient
 from colorama import init
 from loguru import logger
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
 from redis import StrictRedis
-from serial import Serial
-if platform.system() != "Windows": from smbus2 import SMBus, i2c_msg
 
 init()  # IMPORTANT pour Windows CMD
 
@@ -148,7 +140,7 @@ class LoggerUtils:
 
 
 # ============================================================================
-# METHODES POUR LE LOGGER
+# MÉTHODES POUR LE LOGGER
 # ============================================================================
 
 def bind_context(record: Record):

@@ -13,7 +13,7 @@ class SerialDriver(Driver):
         super().__init__(config, process_name)
 
         if process_name == ProcessNames.RC_CONTROL:
-            logger.info("Initializing serial bus...")
+            logger.info("Initialisation du bus série...")
             self.serial_bus = Serial(
                 port=config.serial.port_name,
                 baudrate=config.serial.baud_rate,
@@ -22,7 +22,7 @@ class SerialDriver(Driver):
                 bytesize=serial.EIGHTBITS,
                 timeout=config.serial.timeout,
             )
-            logger.info("Serial bus initialized !")
+            logger.info("Bus série initialisé.")
 
     @override
     def _send_command(self, command: Command) -> bool:

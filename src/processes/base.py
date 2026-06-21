@@ -59,7 +59,7 @@ class RobotProcess(Process, ABC):
     def config(self) -> Config:
         """Configuration chargée du fichier YAML."""
         if self._config is None:
-            self._config = Config.load_for_yml(self._config_path)
+            self._config = Config.load_from_yml(self._config_path)
         return cast(Config, self._config)
 
     @property

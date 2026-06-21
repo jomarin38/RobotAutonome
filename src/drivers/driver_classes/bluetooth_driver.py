@@ -17,6 +17,7 @@ class BluetoothDriver(Driver):
         if process_name == ProcessNames.RC_CONTROL:
             self.loop = asyncio.new_event_loop()
             self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+            self.thread.start()  # démarre la boucle asyncio dans le thread dédié
             self.client = BleakClient(self.config.bluetooth.address)
 
     @override

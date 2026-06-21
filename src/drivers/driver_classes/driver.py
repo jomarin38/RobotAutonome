@@ -60,7 +60,7 @@ class Driver(ABC):
         return Position(x=float(cast(str, raw_x)), y=float(cast(str, raw_y)), direction=float(cast(str, raw_direction)))
 
     def stop(self) -> None:
-        """Arrête le drivers : flush Redis et ferme la connexion."""
+        """Arrête le driver : flush Redis et ferme la connexion."""
         self.redis.flushdb()
         self.redis.close()
 

@@ -48,5 +48,4 @@ class SimDriver(Driver):
 
     @override
     def _add_all_sim_points(self, points: list[SimPoint]) -> None:
-        for point in points:
-            self.sim.add_sim_point(point)
+        self.sim.add_all_sim_points(points)

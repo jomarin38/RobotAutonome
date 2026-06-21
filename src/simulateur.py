@@ -165,6 +165,7 @@ class Sim:
         self.sim_points[sim_point.name] = sim_point
 
     def add_all_sim_points(self, sim_points: list[SimPoint]) -> None:
+        """Enregistre ou met à jour plusieurs points de debug en une seule opération."""
         self.sim_points.update({sp.name: sp for sp in sim_points})
 
     def remove_sim_point(self, name: str) -> bool:
@@ -214,7 +215,7 @@ class Sim:
         La physique est appliquée AVANT le blend pour que l'heuristique reste correcte :
             coast_distance = measured_speed * tick_interval / (1 - inertia_factor)
         """
-        if not self.reseted: raise RuntimeError("Un reset dot être fait avant de pouvoir bouger.")
+        if not self.reseted: raise RuntimeError("Un reset doit être fait avant de pouvoir bouger.")
 
         # 1) Appliquer le mouvement à la vitesse courante (avant blend)
         result = self.update()

@@ -10,7 +10,7 @@ from numba import njit  # type: ignore[import-untyped]
 from src.processes import RobotProcess, ProcessConfig, SharedResources
 from src.utils import ProcessNames
 
-debug = False
+DEBUG = False
 
 MAX_FORWARD_SPEED: float = 100.0
 MAX_TRANSLATE_SPEED: float = 100.0
@@ -236,7 +236,7 @@ class TrajectoryCalculatorProcess(RobotProcess):
                 command=forward_command_speed * y_dir,
             ))
 
-        if debug:
+        if DEBUG:
             logger.debug(
                 f"""target position : {target_position.x} {target_position.y}
                        distance X     : {abs_dx}
