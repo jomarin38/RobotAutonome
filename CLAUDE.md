@@ -15,16 +15,22 @@ Python 3.13 autonomous robot control system for a robotics club. Supports both a
 
 ```bash
 # Run the project
-uv run main.py
+uv run robot-autonome
 
 # Type-check
-uv run mypy main.py simulateur.py trajectory_calculator.py rc_control.py utils/
+uv run mypy src/
 
 # Install dependencies
 uv sync
 ```
 
 There are no tests at this time.
+
+## Rules for Claude Code
+
+1. **Never commit without explicit authorization** — Always ask for permission before running `git commit`, `git push`, or any destructive git operations.
+2. **Do not modify code without being asked** — Only write code when explicitly requested by the user.
+3. **Follow project code style** — All code must follow the existing style and conventions of this project.
 
 ## Architecture
 

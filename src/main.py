@@ -49,7 +49,7 @@ logger.add(
     level="DEBUG"
 )
 
-if __name__ == "__main__":
+def main() -> None:
     config = Config.load_for_yml(CONFIG_FILE)
 
     stop_event = mp.Event()
@@ -100,3 +100,7 @@ if __name__ == "__main__":
         logger.critical(f"Le programme a planté. Code de sortie : {process_exit_code.value}. Arrêt.")
 
     sys.exit()
+
+
+if __name__ == "__main__":
+    main()

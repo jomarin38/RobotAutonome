@@ -21,13 +21,16 @@ dependencies = [
     "smbus2>=0.6.1",
 ]
 
+[project.scripts]
+robot-autonome = "src.main:main"
+
 # Poetry : ne pas installer le projet lui-même
 [tool.poetry]
 package-mode = false
 
-# uv : projet applicatif, pas destiné à être build/publish
+# uv : projet applicatif
 [tool.uv]
-package = false
+package = true
 
 [dependency-groups]
 dev = [
