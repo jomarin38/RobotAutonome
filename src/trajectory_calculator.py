@@ -2,7 +2,7 @@ from src import *
 
 import time
 from collections import deque
-from typing import cast, Optional
+from typing import cast, Optional, override
 
 from loguru import logger
 from numba import njit  # type: ignore[import-untyped]

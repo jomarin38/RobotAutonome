@@ -1,3 +1,5 @@
+from redis import StrictRedis
+
 from src import *
 
 import multiprocessing as mp

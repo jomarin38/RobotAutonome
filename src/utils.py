@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from src import *
-
 import copy
 import struct
 import traceback

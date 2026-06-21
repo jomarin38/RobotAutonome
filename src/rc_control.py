@@ -2,7 +2,7 @@ from src import *
 
 import copy
 import time
-from typing import Optional
+from typing import Optional, override
 
 from src.processes import RobotProcess, ProcessConfig, SharedResources
 from src.utils import ProcessNames
