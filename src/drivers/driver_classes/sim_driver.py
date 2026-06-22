@@ -14,8 +14,8 @@ class SimDriver(Driver):
 
         if process_name == ProcessNames.RC_CONTROL:
             self.sim = Sim(
-                window_size=(config.sim.window.width, config.sim.window.height),
-                tick_rate=config.sim.tick_rate,
+                window_size=(config.protocols.sim.window.width, config.protocols.sim.window.height),
+                tick_rate=config.protocols.sim.tick_rate,
                 forward_scale=config.movement_coeff.forward,
                 translate_scale=config.movement_coeff.translate,
                 rotate_scale=config.movement_coeff.rotate,
@@ -26,9 +26,9 @@ class SimDriver(Driver):
             )
             self.sim.reset(
                 Position(
-                    x=config.sim.start_position.x,
-                    y=config.sim.start_position.y,
-                    direction=config.sim.start_position.direction,
+                    x=config.protocols.sim.start_position.x,
+                    y=config.protocols.sim.start_position.y,
+                    direction=config.protocols.sim.start_position.direction,
                 )
             )
 
@@ -36,6 +36,20 @@ class SimDriver(Driver):
     def _send_command(self, command: Command) -> bool:
         running, _ = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
         return running
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     @override
     def stop(self):

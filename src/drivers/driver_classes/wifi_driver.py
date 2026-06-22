@@ -13,7 +13,7 @@ class WifiDriver(Driver):
 
         if process_name == ProcessNames.RC_CONTROL:
             self.tcp_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.tcp_client.connect((self.config.wifi.host, config.wifi.port))
+            self.tcp_client.connect((self.config.protocols.wifi.host, config.protocols.wifi.port))
 
     @override
     def _send_command(self, command: Command) -> bool:

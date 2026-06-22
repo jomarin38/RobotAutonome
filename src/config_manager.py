@@ -48,6 +48,14 @@ class SimConfig(BaseModel):
     start_position: SimStartPositionConfig
 
 
+class ProtocolsConfig(BaseModel):
+    serial: SerialConfig
+    i2c: I2CConfig
+    bluetooth: BluetoothConfig
+    wifi: WifiConfig
+    sim: SimConfig
+
+
 class MovementCoeffConfig(BaseModel):
     forward: float = 1.0
     translate: float = 1.0
@@ -76,11 +84,7 @@ class OthersConfig(BaseModel):
 
 class Config(BaseModel):
     redis: RedisConfig
-    serial: SerialConfig
-    i2c: I2CConfig
-    bluetooth: BluetoothConfig
-    wifi: WifiConfig
-    sim: SimConfig
+    protocols: ProtocolsConfig
     movement_coeff: MovementCoeffConfig
     inertia_factor: InertiaFactorConfig
     utils: UtilsConfig

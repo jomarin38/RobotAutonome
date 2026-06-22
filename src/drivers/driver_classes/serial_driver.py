@@ -15,12 +15,12 @@ class SerialDriver(Driver):
         if process_name == ProcessNames.RC_CONTROL:
             logger.info("Initialisation du bus série...")
             self.serial_bus = Serial(
-                port=config.serial.port_name,
-                baudrate=config.serial.baud_rate,
+                port=config.protocols.serial.port_name,
+                baudrate=config.protocols.serial.baud_rate,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 bytesize=serial.EIGHTBITS,
-                timeout=config.serial.timeout,
+                timeout=config.protocols.serial.timeout,
             )
             logger.info("Bus série initialisé.")
 

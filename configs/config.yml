@@ -3,32 +3,33 @@ redis:
   port: 6379
   db: 0
 
-serial:
-  port_name: "/dev/ttyUSB0"
-  baud_rate: 115200
-  timeout: 0.2
+protocols:
+  serial:
+    port_name: "/dev/ttyUSB0"
+    baud_rate: 115200
+    timeout: 0.2
 
-i2c:
-  bus: 1
-  address: 0x42
+  i2c:
+    bus: 1
+    address: 0x42
 
-bluetooth:
-  address: "F0:F5:64:8C:CB:07"
-  char_uuid: "00001101-0000-1000-8000-00805f9b34fb"
+  bluetooth:
+    address: "F0:F5:64:8C:CB:07"
+    char_uuid: "00001101-0000-1000-8000-00805f9b34fb"
 
-wifi:
-  host: "192.168.1.10"
-  port: 5000
+  wifi:
+    host: "192.168.1.10"
+    port: 5000
 
-sim:
-  tick_rate: 60
-  start_position:
-    x: 500
-    y: 400
-    direction: -90
-  window:
-    width: 1300
-    height: 700
+  sim:
+    tick_rate: 60
+    start_position:
+      x: 500
+      y: 400
+      direction: -90
+    window:
+      width: 1300
+      height: 700
 
 movement_coeff:
   forward: 0.3

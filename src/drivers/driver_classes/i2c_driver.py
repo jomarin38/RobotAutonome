@@ -16,11 +16,11 @@ class I2CDriver(Driver):
             raise NotImplementedError("Le driver I2C n'est pas implémenté pour Windows.")
         super().__init__(config, process_name)
         if process_name == ProcessNames.RC_CONTROL:
-            self.i2c_bus = SMBus(self.config.i2c.bus)
+            self.i2c_bus = SMBus(self.config.protocols.i2c.bus)
 
     @override
     def _send_command(self, command: Command) -> bool:
-        self.i2c_bus.i2c_rdwr(i2c_msg.write(self.config.i2c.address, bytes(command)))
+        self.i2c_bus.i2c_rdwr(i2c_msg.write(self.config.protocols.i2c.address, bytes(command)))
         return True
 
     @override

@@ -18,7 +18,7 @@ class BluetoothDriver(Driver):
             self.loop = asyncio.new_event_loop()
             self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
             self.thread.start()  # démarre la boucle asyncio dans le thread dédié
-            self.client = BleakClient(self.config.bluetooth.address)
+            self.client = BleakClient(self.config.protocols.bluetooth.address)
 
     @override
     def _send_command(self, command: Command) -> bool:
@@ -26,7 +26,7 @@ class BluetoothDriver(Driver):
         return True
 
     async def _send_ble(self, command: Command):
-        await self.client.write_gatt_char(self.config.bluetooth.char_uuid, bytes(command))
+        await self.client.write_gatt_char(self.config.protocols.bluetooth.char_uuid, bytes(command))
 
     @override
     async def stop(self) -> None:
