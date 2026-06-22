@@ -30,7 +30,7 @@ package-mode = false
 
 # uv : projet applicatif
 [tool.uv]
-package = true
+package = false
 
 [dependency-groups]
 dev = [
