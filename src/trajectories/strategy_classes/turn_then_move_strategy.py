@@ -1,3 +1,4 @@
+import time
 from math import ceil, log, cos, sqrt, pi, atan2, sin
 from typing import override
 
@@ -8,8 +9,12 @@ from src.trajectories.trajectory_strategy import TrajectoryStrategy
 
 DEBUG = False
 
+MAX_FORWARD_SPEED: float = 100.0
+MAX_ROTATE_SPEED: float = 100.0
+
 @njit(cache=True)
 def compute_trajectory_with_rotation(
+    tick_interval: float,
     x_target: float,
     y_target: float,
     prev_x: float,
@@ -39,7 +44,7 @@ def compute_trajectory_with_rotation(
 
     # 1) Target distance + direction
     dx = x_target - x_position
-    dy = y_position - y_target
+    dy = y_target - y_position
     target_distance = sqrt(dx * dx + dy * dy)
     target_direction = atan2(dy, dx)
 
@@ -59,14 +64,16 @@ def compute_trajectory_with_rotation(
         current_time_rotate += (deg * rotate_coeff / 100.0 if deg > 1.0 else 0.0)
 
     # 4) Durée d'avance
-    current_time_forward = current_time_rotate + (target_distance / 100.0 * forward_coeff)
+    #current_time_forward = current_time_rotate + (target_distance / 100.0 * forward_coeff)
+    forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(dy), 1e-4) * forward_coeff / tick_interval)
+    current_time_forward = target_distance / forward_command_speed * forward_coeff
 
     # 5) Heuristique d'inertie : prédit la position future du robot pour compenser l'inertie
-    if (prev_x != x_position) or (prev_y != y_position):
+    if (prev_x, prev_y) != (x_position, y_position):
         actual_speed = sqrt((x_position - prev_x) ** 2 + (y_position - prev_y) ** 2) / delta_time
 
         # Prédiction de la position avec inertie
-        if actual_speed <= 0.1:
+        if actual_speed <= 1e-4:
             inertie_dist_predicted = 0.0
             inertie_pos_predicted_x = x_position
             inertie_pos_predicted_y = y_position
@@ -123,6 +130,10 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
         prev_x = previous_position.x
         prev_y = previous_position.y
 
+        current_time = time.time()
+        tick_interval = current_time - self.prev_time
+        self.prev_time = current_time
+
         (
             target_distance,
             target_direction,
@@ -132,6 +143,7 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
             inertie_to_target_delta,
             sens,
         ) = compute_trajectory_with_rotation(
+            tick_interval,
             float(target_position.x),
             float(target_position.y),
             float(prev_x),
@@ -152,6 +164,7 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
                 finish_time=current_time_rotate,
                 command=sens * 100.0,
             ))
+            forward_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
 
         # Puis avance après la rotation (décalée temporellement)
         if inertie_to_target_delta > 0:

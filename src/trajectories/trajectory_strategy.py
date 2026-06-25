@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import time
+
 from src.utils import Position, AllCommandBuffers
 from src.config_manager import MovementCoeffConfig, InertiaFactorConfig
 
@@ -30,6 +32,7 @@ class TrajectoryStrategy(ABC):
             config: Configuration de la stratégie (coefficients, facteurs, etc.)
         """
         self.config = config
+        self.prev_time = time.time()
 
     @abstractmethod
     def compute(
