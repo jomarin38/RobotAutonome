@@ -16,6 +16,12 @@ from .utils import (
     SharedCommandBuffer,
 )
 from .config_manager import Config
+from .trajectories import (
+    TrajectoryStrategy,
+    TrajectoryStrategies,
+    TurnThenMoveStrategy,
+    MixedMovementStrategy,
+)
 
 __all__ = [
     "ProcessNames",
@@ -34,4 +40,8 @@ __all__ = [
     "CommandBuffer",
     "SharedCommandBuffer",
     "Config",
+    "TrajectoryStrategy",
+    "TrajectoryStrategies",
+    "TurnThenMoveStrategy",
+    "MixedMovementStrategy",
 ]

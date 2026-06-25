@@ -36,4 +36,5 @@ package = false
 dev = [
     "deptry>=0.25.1",
     "mypy>=2.1.0",
+    "pycycle>=0.0.8",
 ]

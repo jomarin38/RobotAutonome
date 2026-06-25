@@ -15,6 +15,7 @@ from src.trajectory_calculator import TrajectoryCalculatorProcess
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
+trajectory_strategy_class = TrajectoryStrategies.TURN_THEN_MOVE.value
 
 logger.remove()
 logger.configure(patcher=bind_context)
@@ -69,12 +70,13 @@ def main() -> None:
     process_config = ProcessConfig(
         config_file_path=CONFIG_FILE,
         driver_class=driver_class,
+
     )
 
     logger.info("Manager et variables partagées initialisés.")
     logger.info("Lancement des processus...")
 
-    trajectory_calculator_process = TrajectoryCalculatorProcess(shared_resources, process_config)
+    trajectory_calculator_process = TrajectoryCalculatorProcess(shared_resources, process_config, trajectory_strategy_class)
     trajectory_calculator_process.start()
 
     rc_control_process = RCControlProcess(shared_resources, process_config)
