@@ -4,7 +4,6 @@ from typing import cast, Optional, override
 
 from loguru import logger
 
-from src import *  # noqa: F403
 from utils import LoggerUtils
 from ..robot_process import RobotProcess, SharedResources, ProcessConfig
 from src.trajectories import TrajectoryStrategy, StrategyConfig
