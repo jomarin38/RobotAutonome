@@ -110,10 +110,10 @@ def main() -> None:
 
     if process_exit_code.value == 0:
         logger.info("Arrêt du programme.")
+        sys.exit(0)
     else:
         logger.critical(f"Le programme a planté. Code de sortie : {process_exit_code.value}. Arrêt.")
-
-    sys.exit()
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
