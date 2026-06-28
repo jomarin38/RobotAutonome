@@ -1,5 +1,5 @@
 import time
-from math import ceil, log, cos, sqrt, pi, atan2, sin
+from math import cos, sqrt, pi, atan2, sin
 from typing import override
 
 from numba import njit
@@ -12,34 +12,36 @@ DEBUG = False
 MAX_FORWARD_SPEED: float = 100.0
 MAX_ROTATE_SPEED: float = 100.0
 
+
 @njit(cache=True)
 def compute_trajectory_with_rotation(
-    tick_interval: float,
+    dt: float,
     x_target: float,
     y_target: float,
-    prev_x: float,
-    prev_y: float,
-    inertie_coeff: float,
-    delta_time: float,
+    x_mesure: float,
+    y_mesure: float,
+    inertia_factor: float,
+    dt_mesure: float,
     x_position: float,
     y_position: float,
     current_direction_deg: float,
-    rotate_coeff: float,
-    forward_coeff: float,
-) -> tuple[float, float, float, float, float, float, float]:
-    """Noyau de calcul compilé (numba) pour `generate_trajectory`.
+    rotate_scale: float,
+    forward_scale: float,
+) -> tuple[float, float, float, float, float, float, float, float]:
+    """Noyau de calcul compilé (numba) pour la stratégie TurnThenMove.
 
     Regroupe plusieurs petits calculs pour réduire l'overhead d'appel et laisser
     numba optimiser un bloc plus gros.
 
-    Retour:
-    - target_distance
-    - target_direction (radians)
-    - delta_angle (radians)
-    - current_time_direction
-    - current_time_throttle
-    - inertie_to_target_delta
-    - sens (signe de delta_angle, ou 0 si delta_angle ~ 0)
+    Retour (dans l'ordre) :
+    - target_distance        : distance euclidienne jusqu'à la cible
+    - target_direction       : angle vers la cible (radians)
+    - delta_angle            : écart angulaire à corriger (radians)
+    - current_time_rotate    : durée estimée de la phase de rotation (secondes)
+    - forward_command_speed  : vitesse de consigne pour l'avance
+    - current_time_forward   : durée totale rotation + avance (secondes)
+    - inertie_to_target_delta: distance corrigée tenant compte de l'inertie
+    - angle_sign                   : signe de delta_angle (+1 / -1 / 0)
     """
 
     # 1) Target distance + direction
@@ -53,24 +55,26 @@ def compute_trajectory_with_rotation(
     delta_angle = (delta_angle + pi) % (2 * pi) - pi
     delta_angle = -delta_angle
 
-    # Signe (même logique que `calculate_sens`)
+    # Signe (même logique que `calculate_angle_sign`)
     abs_delta_angle = abs(delta_angle)
-    sens = delta_angle / abs_delta_angle if abs_delta_angle > 1e-6 else 0.0
+    angle_sign = delta_angle / abs_delta_angle if abs_delta_angle > 1e-6 else 0.0
 
     # 3) Durée de rotation
     current_time_rotate = 0.0
-    if abs(delta_angle) > 0.034:
-        deg = abs(delta_angle) * 180.0 / pi
-        current_time_rotate += (deg * rotate_coeff / 100.0 if deg > 1.0 else 0.0)
+    deg = abs(delta_angle) * 180.0 / pi
+    if deg > 5:
+        current_time_rotate = deg * rotate_scale / 100.0 if deg > 1.0 else 0.0
 
     # 4) Durée d'avance
-    #current_time_forward = current_time_rotate + (target_distance / 100.0 * forward_coeff)
-    forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(dy), 1e-4) * forward_coeff / tick_interval)
-    current_time_forward = target_distance / forward_command_speed * forward_coeff
+    forward_command_speed = 0
+    current_time_forward = current_time_rotate
+    if target_distance >= 10:
+        forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(target_distance), 1e-4) * forward_scale / dt)
+        current_time_forward = current_time_rotate + target_distance / forward_command_speed * forward_scale
 
     # 5) Heuristique d'inertie : prédit la position future du robot pour compenser l'inertie
-    if (prev_x, prev_y) != (x_position, y_position):
-        actual_speed = sqrt((x_position - prev_x) ** 2 + (y_position - prev_y) ** 2) / delta_time
+    if (x_mesure, y_mesure) != (x_position, y_position):
+        actual_speed = sqrt((x_position - x_mesure) ** 2 + (y_position - y_mesure) ** 2) / dt_mesure
 
         # Prédiction de la position avec inertie
         if actual_speed <= 1e-4:
@@ -78,11 +82,10 @@ def compute_trajectory_with_rotation(
             inertie_pos_predicted_x = x_position
             inertie_pos_predicted_y = y_position
         else:
-            if inertie_coeff >= 1.0:
+            if inertia_factor >= 1.0:
                 total_dist = actual_speed
             else:
-                n = ceil(log(0.1 / actual_speed) / log(inertie_coeff))
-                total_dist = actual_speed * (inertie_coeff * (1.0 - inertie_coeff ** n) / (1.0 - inertie_coeff))
+                total_dist = actual_speed * dt / (1.0 - inertia_factor)
 
             current_direction_rad = current_direction_deg * pi / 180.0
             inertie_pos_predicted_x = x_position + total_dist * cos(current_direction_rad)
@@ -102,10 +105,12 @@ def compute_trajectory_with_rotation(
         target_direction,
         delta_angle,
         current_time_rotate,
+        forward_command_speed,
         current_time_forward,
         inertie_to_target_delta,
-        sens
+        angle_sign
     )
+
 
 class TurnThenMoveStrategy(TrajectoryStrategy):
     """Stratégie classique : rotation d'abord, puis avance (séquentiel).
@@ -119,37 +124,38 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
         self,
         target_position: Position,
         robot_position: Position,
-        previous_position: Position,
-        elapsed_time: float,
+        measured_position: Position,
+        dt_mesure: float,
     ) -> AllCommandBuffers:
         """Implémentation avec rotation séquentielle puis avance."""
         forward_buffer: CommandBuffer = []
         translate_buffer: CommandBuffer = []
         rotate_buffer: CommandBuffer = []
 
-        prev_x = previous_position.x
-        prev_y = previous_position.y
+        x_mesure = measured_position.x
+        y_mesure = measured_position.y
 
         current_time = time.time()
-        tick_interval = current_time - self.prev_time
-        self.prev_time = current_time
+        dt = current_time - self.previous_time
+        self.previous_time = current_time
 
         (
             target_distance,
             target_direction,
             delta_angle,
             current_time_rotate,
+            forward_command_speed,
             current_time_forward,
             inertie_to_target_delta,
-            sens,
+            angle_sign,
         ) = compute_trajectory_with_rotation(
-            tick_interval,
+            dt,
             float(target_position.x),
             float(target_position.y),
-            float(prev_x),
-            float(prev_y),
+            float(x_mesure),
+            float(y_mesure),
             float(self.config.inertia_factor.forward),
-            float(elapsed_time),
+            float(dt_mesure),
             float(robot_position.x),
             float(robot_position.y),
             float(robot_position.direction),
@@ -159,18 +165,18 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
 
         # Construction des buffers : d'abord rotation, puis avance
         # Rotation d'abord si l'angle delta est significatif
-        if abs(delta_angle) > 0.034:
-            rotate_buffer.append(CommandBufferItem(
-                finish_time=current_time_rotate,
-                command=sens * 100.0,
-            ))
-            forward_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
+        
+        rotate_buffer.append(CommandBufferItem(
+            finish_time=current_time_rotate,
+            command=angle_sign * 100.0,
+        ))
+        forward_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
 
         # Puis avance après la rotation (décalée temporellement)
         if inertie_to_target_delta > 0:
             forward_buffer.append(CommandBufferItem(
                 finish_time=current_time_forward,
-                command=100.0,
+                command=forward_command_speed,
             ))
 
         if DEBUG:

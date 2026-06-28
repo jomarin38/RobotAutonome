@@ -37,8 +37,8 @@ movement_coeff:
   rotate: 0.3
 
 inertia_factor:
-  forward: 0 #0.2
-  translate: 0 #0.2
+  forward: 0.2
+  translate: 0.2
   rotate: 0 #0.4
 
 utils:

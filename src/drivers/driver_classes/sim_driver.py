@@ -7,6 +7,13 @@ from .driver import Driver
 
 
 class SimDriver(Driver):
+    """Driver pour le simulateur Pygame.
+
+    En mode RC_CONTROL, initialise et pilote le simulateur Pygame.
+    En mode TRAJECTORY_CALCULATOR, n'instancie pas le simulateur
+    (la position est lue via Redis).
+    """
+
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 
@@ -36,9 +43,6 @@ class SimDriver(Driver):
     def _send_command(self, command: Command) -> bool:
         running, _ = self.sim.move(rotate=command.rotate, forward=command.forward, translate=command.translate)
         return running
-
-
-
 
 
 

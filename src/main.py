@@ -1,17 +1,17 @@
-from redis import StrictRedis
-
-from src import *
-
 import multiprocessing as mp
 import sys
 from pathlib import Path
 
 from loguru import logger
+from redis import StrictRedis
 
+from src import *  # noqa: F403
+from src.config_manager import Config
 from src.drivers import Drivers
 from src.processes import ProcessConfig, SharedResources
 from src.rc_control import RCControlProcess
 from src.trajectory_calculator import TrajectoryCalculatorProcess
+from src.trajectories import TrajectoryStrategies
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
@@ -20,7 +20,7 @@ trajectory_strategy_class = TrajectoryStrategies.TURN_THEN_MOVE.value
 logger.remove()
 logger.configure(patcher=bind_context)
 logger.add(
-    Path(__file__).parent.parent / "logs" / "latests.log",
+    Path(__file__).parent.parent / "logs" / "latest.log",
     format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
@@ -49,6 +49,12 @@ logger.add(
 )
 
 def main() -> None:
+    """Point d'entrée principal du programme.
+
+    Initialise le manager multiprocessing, crée les ressources partagées,
+    lance les processus de contrôle RC et de calcul de trajectoire,
+    puis attend leur terminaison avant de nettoyer Redis.
+    """
     logger.info("Initialisation du manager et des variables partagées...")
 
     manager = mp.Manager()

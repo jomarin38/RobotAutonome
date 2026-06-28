@@ -32,23 +32,23 @@ class TrajectoryStrategy(ABC):
             config: Configuration de la stratégie (coefficients, facteurs, etc.)
         """
         self.config = config
-        self.prev_time = time.time()
+        self.previous_time = time.time()
 
     @abstractmethod
     def compute(
         self,
         target_position: Position,
         robot_position: Position,
-        previous_position: Position,
-        elapsed_time: float,
+        measured_position: Position,
+        dt_mesure: float,
     ) -> AllCommandBuffers:
         """Calcule les buffers de commandes pour atteindre la cible.
 
         Args:
             target_position: Position cible (x, y, direction)
             robot_position: Position courante du robot
-            previous_position: Position précédente (pour mesurer la vitesse)
-            elapsed_time: Temps écoulé depuis la position précédente
+            measured_position: Position mesurée précédemment (pour mesurer la vitesse)
+            dt_mesure: Temps écoulé depuis la mesure précédente
 
         Returns:
             AllCommandBuffers contenant les buffers forward, translate, rotate

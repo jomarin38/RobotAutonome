@@ -6,6 +6,7 @@ from redis import StrictRedis
 from src.config_manager import Config
 from src.utils import ProcessNames, Position, Command, SimPoint, logger
 
+
 class Driver(ABC):
     """Classe abstraite pour gérer la communication avec le robot/simulateur.
 
@@ -46,7 +47,16 @@ class Driver(ABC):
         return Position(x=cast(float, x), y=cast(float, y), direction=cast(float, direction)) if None not in [x, y, direction] else None
 
     @abstractmethod
-    def _send_command(self, command: Command) -> bool: ...
+    def _send_command(self, command: Command) -> bool:
+        """Envoie une commande de mouvement au robot.
+
+        Args:
+            command: Commande à envoyer (forward, translate, rotate).
+
+        Returns:
+            True si le robot est toujours actif, False sinon.
+        """
+        ...
 
     def _get_robot_position(self) -> Position:
         """Récupère la position courante du robot depuis Redis."""
@@ -67,6 +77,10 @@ class Driver(ABC):
         """Vérifie si une cible est définie et accessible."""
         return self._get_target_position() is not None
 
-    def _add_sim_point(self, point: SimPoint) -> None: ...
+    def _add_sim_point(self, point: SimPoint) -> None:
+        """Ajoute un point de debug au simulateur (no-op par défaut)."""
+        ...
 
-    def _add_all_sim_points(self, points: list[SimPoint]) -> None: ...
+    def _add_all_sim_points(self, points: list[SimPoint]) -> None:
+        """Ajoute plusieurs points de debug au simulateur (no-op par défaut)."""
+        ...

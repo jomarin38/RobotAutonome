@@ -3,20 +3,19 @@ from __future__ import annotations
 import copy
 import struct
 import traceback
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, asdict, astuple
 from enum import Enum
 from multiprocessing.managers import ListProxy
-from typing import Optional, TYPE_CHECKING, Any, TypedDict, cast, Protocol, Literal, override
+from typing import Optional, TYPE_CHECKING, Any, Protocol
 
 from colorama import init
 from loguru import logger
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
-from redis import StrictRedis
 
-init()  # IMPORTANT pour Windows CMD
+init()  # IMPORTANT pour Windows CMD (active les codes ANSI dans le terminal)
 
 if TYPE_CHECKING:
     from .simulateur import Sim
@@ -53,9 +52,6 @@ class DataClassUtils[T](ABC):
     def asdict(self: T) -> dict[str, Any]:
         return asdict(self)
 
-    @classmethod
-    def from_dict(cls: type[T], data: dict | TypedDict) -> T:
-        return from_dict(data_class=cls, data=data)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -128,8 +124,18 @@ class AllCommandBuffers(DataClassUtils):
 # ============================================================================
 
 class LoggerUtils:
+    """Utilitaires de formatage pour le logger."""
+
     @staticmethod
     def format_traceback(e: BaseException) -> str:
+        """Formate une exception avec coloration syntaxique pour l'affichage terminal.
+
+        Args:
+            e: Exception à formater.
+
+        Returns:
+            Traceback formaté avec coloration ANSI.
+        """
         return highlight(
             "".join(traceback.TracebackException.from_exception(e).format()),
             PythonTracebackLexer(),
@@ -138,10 +144,19 @@ class LoggerUtils:
 
 
 # ============================================================================
-# MÉTHODES POUR LE LOGGER
+# PATCHER POUR LE LOGGER
 # ============================================================================
 
-def bind_context(record: Record):
+def bind_context(record: Record) -> None:
+    """Injecte le contexte d'appel (fichier, classe, fonction, ligne) dans chaque log.
+
+    Utilisé comme patcher loguru via logger.configure(patcher=bind_context).
+    Ajoute la clé ``extra['context']`` au record sous la forme
+    ``fichier::classe::fonction:ligne`` ou ``fichier::fonction:ligne``.
+
+    Args:
+        record: Enregistrement de log loguru à enrichir.
+    """
     file = record["file"].name
     line = record["line"]
     func = record["function"]

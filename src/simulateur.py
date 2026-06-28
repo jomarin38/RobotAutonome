@@ -1,22 +1,20 @@
-from abc import ABC
-from dataclasses import dataclass
-from typing import Optional, cast
-
-from redis import StrictRedis
-
-from src import *
-
+import math
 import os
 import time
+from abc import ABC
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, cast
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
-import math
-from pathlib import Path
-
 import pygame
+from redis import StrictRedis
+
+from src import *  # noqa: F403
 
 class RobotBase(ABC):
+    """Interface de base définissant les attributs de position du robot."""
     x: float
     y: float
     direction: float
@@ -64,7 +62,7 @@ class Robot(pygame.sprite.Sprite, RobotBase):
         self.y += delta_y * dt / self.forward_scale
         self.rect.center = (int(self.x), int(self.y))
 
-    def set_pos(self, x: float, y: float, direction: float) -> None:
+    def set_position(self, x: float, y: float, direction: float) -> None:
         """Téléporte le robot à une position et un angle donnés."""
         self.x = x
         self.y = y
@@ -76,6 +74,7 @@ class Robot(pygame.sprite.Sprite, RobotBase):
 
 @dataclass(frozen=True)
 class NotDefinedRobot(RobotBase):
+    """Représentation d'un robot non initialisé (position par défaut)."""
     x: float
     y: float
     direction: float
@@ -133,7 +132,7 @@ class Sim:
 
         self.redis = redis
 
-        self.reseted = False
+        self.is_reset = False
 
     def reset(self, initial_position: Position) -> tuple[bool, Observation]:
         """Réinitialise le simulateur et place le robot à la position de départ."""
@@ -153,7 +152,7 @@ class Sim:
         self.forward_speed = 0.0
         self.translate_speed = 0.0
 
-        self.reseted = True
+        self.is_reset = True
 
         return self.running, self.get_observation()
 
@@ -207,6 +206,7 @@ class Sim:
 
     @staticmethod
     def _clamp(x: float, lo: float, hi: float) -> float:
+        """Contraint une valeur dans l'intervalle [lo, hi]."""
         return min(max(x, lo), hi)
 
     def move(
@@ -219,15 +219,14 @@ class Sim:
 
         None sur un axe = aucune consigne → la vitesse décroît naturellement (inertie).
         La physique est appliquée AVANT le blend pour que l'heuristique reste correcte :
-            coast_distance = measured_speed * tick_interval / (1 - inertia_factor)
+            inertia_drift_distance = measured_speed * dt / (1 - inertia_factor)
         """
-        if not self.reseted: raise RuntimeError("Un reset doit être fait avant de pouvoir bouger.")
+        if not self.is_reset: raise RuntimeError("Un reset doit être fait avant de pouvoir bouger.")
 
-        # 1) Appliquer le mouvement à la vitesse courante (avant blend)
         result = self.update()
 
-        # 2) Blender vers la consigne : speed_new = speed * alpha + cmd * (1 - alpha)
-        #    None → cmd = 0 → décroissance exponentielle vers 0 (même formule que l'inertie)
+        # Blender vers la consigne : speed_new = speed * alpha + cmd * (1 - alpha)
+        # None → cmd = 0 → décroissance exponentielle vers 0 (même formule que l'inertie)
         cmd_rotate = rotate if rotate is not None else 0.0
         cmd_forward = forward if forward is not None else 0.0
         cmd_translate = translate if translate is not None else 0.0
@@ -251,10 +250,10 @@ class Sim:
         self.robot.move(forward, translate=False, dt=dt)
         self.robot.move(translate, translate=True, dt=dt)
 
-    def set_pos(self, *args) -> bool:
+    def set_position(self, *args) -> bool:
         """Téléporte le robot sans appliquer de blend de vitesse."""
         assert self.robot is not None
-        self.robot.set_pos(*args)
+        self.robot.set_position(*args)
         return self.update()
 
     def update(self) -> bool:

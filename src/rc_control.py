@@ -1,11 +1,9 @@
-from src import *
-
 import copy
 import time
 from typing import Optional, override
 
+from src import *  # noqa: F403
 from src.processes import RobotProcess, ProcessConfig, SharedResources
-from src.utils import ProcessNames
 
 
 class RCControlProcess(RobotProcess):
@@ -110,8 +108,6 @@ class RCControlProcess(RobotProcess):
         running = self.driver.send_command(Command(None, None, None))
 
         while not self.shared.stop_event.is_set():
-            time.sleep(0.01)  # tick RC à ~100 Hz
-
             with self.shared.shared_sim_points_lock:
                 sim_points = copy.deepcopy(list(self.shared.shared_sim_points))
 

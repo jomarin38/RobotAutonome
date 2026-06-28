@@ -1,23 +1,12 @@
-from math import sqrt, atan2, pi, ceil, log, cos, sin
-
-from src import *
-
 import time
 from collections import deque
 from typing import cast, Optional, override
 
 from loguru import logger
-from numba import njit  # type: ignore[import-untyped]
 
+from src import *  # noqa: F403
 from src.processes import RobotProcess, ProcessConfig, SharedResources
-from src.utils import ProcessNames
-from src.trajectories import TrajectoryStrategy, TrajectoryStrategies, StrategyConfig
-
-DEBUG = False
-
-MAX_FORWARD_SPEED: float = 100.0
-MAX_TRANSLATE_SPEED: float = 100.0
-MAX_ROTATE_SPEED: float = 100.0
+from src.trajectories import TrajectoryStrategy, StrategyConfig
 
 class TrajectoryCalculatorProcess(RobotProcess):
     """Processus de calcul de trajectoire.
@@ -69,7 +58,7 @@ class TrajectoryCalculatorProcess(RobotProcess):
     def strategy(self) -> TrajectoryStrategy:
         """Stratégie de trajectoire initialisée lazily."""
         if self._strategy is None:
-            # Créer une config pour la stratégie
+            # Initialisation paresseuse : instanciation à la première utilisation
             strategy_config = StrategyConfig(
                 movement_coeff=self.config.movement_coeff,
                 inertia_factor=self.config.inertia_factor,
@@ -80,8 +69,13 @@ class TrajectoryCalculatorProcess(RobotProcess):
 
         return cast(TrajectoryStrategy, self._strategy)
 
-    def _get_previous_position(self) -> tuple[Position, float]:
-        """Calcule la position de référence pour mesurer la vitesse."""
+    def _get_measured_position(self) -> tuple[Position, float]:
+        """Calcule la position mesurée précédemment pour mesurer la vitesse.
+
+        Retourne:
+            - Position mesurée précédemment
+            - Temps écoulé depuis cette mesure (dt_mesure)
+        """
         if len(self.position_history) >= self.config.others.previous_position_buffer_len:
             oldest_position_record = self.position_history.popleft()
             return oldest_position_record.position, self._current_time - oldest_position_record.timestamp
@@ -98,15 +92,15 @@ class TrajectoryCalculatorProcess(RobotProcess):
     def _planify_trajectory(
             self,
             target_position: Position,
-            previous_position: Position,
-            elapsed_time: float,
+            measured_position: Position,
+            dt_mesure: float,
     ) -> AllCommandBuffers:
         """Calcule les buffers de commandes via la stratégie configurée."""
         command_buffers = self.strategy.compute(
             target_position=target_position,
             robot_position=self.robot_position,
-            previous_position=previous_position,
-            elapsed_time=elapsed_time,
+            measured_position=measured_position,
+            dt_mesure=dt_mesure,
         )
 
         # Si la stratégie fournit des points de debug (cas MixedMovementStrategy)
@@ -133,12 +127,12 @@ class TrajectoryCalculatorProcess(RobotProcess):
                 continue
 
             self.robot_position = self.driver.get_robot_position()
-            previous_position, elapsed_time = self._get_previous_position()
+            measured_position, dt_mesure = self._get_measured_position()
 
             command_buffers = self._planify_trajectory(
                 cast(Position, target_position),
-                previous_position,
-                elapsed_time,
+                measured_position,
+                dt_mesure,
             )
 
             self.position_history.append(PreviousPosition(position=self.robot_position, timestamp=self._current_time))

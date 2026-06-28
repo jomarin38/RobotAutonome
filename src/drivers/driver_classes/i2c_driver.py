@@ -11,6 +11,8 @@ if platform.system() != "Windows":
 
 
 class I2CDriver(Driver):
+    """Driver pour la communication I2C avec le robot (Linux uniquement)."""
+
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         if platform.system() == "Windows":
             raise NotImplementedError("Le driver I2C n'est pas implémenté pour Windows.")

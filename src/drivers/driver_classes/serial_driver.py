@@ -9,6 +9,8 @@ from .driver import Driver
 
 
 class SerialDriver(Driver):
+    """Driver pour la communication série (UART/USB) avec le robot."""
+
     def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
         super().__init__(config, process_name)
 

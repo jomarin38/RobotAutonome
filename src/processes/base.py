@@ -1,5 +1,3 @@
-from src import *
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing import Process
@@ -10,6 +8,8 @@ from typing import Optional, cast
 
 from loguru import logger
 
+from src import *  # noqa: F403
+from src.config_manager import Config
 from src.drivers import Driver
 
 

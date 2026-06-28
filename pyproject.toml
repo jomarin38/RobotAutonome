@@ -19,6 +19,8 @@ dependencies = [
     "bleak>=3.0.2,<4.0.0",
     "loguru>=0.7.3",
     "smbus2>=0.6.1",
+    "ruff>=0.15.20",
+    "black>=26.5.1",
 ]
 
 [project.scripts]
@@ -37,4 +39,10 @@ dev = [
     "deptry>=0.25.1",
     "mypy>=2.1.0",
     "pycycle>=0.0.8",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "F405",
+    "E701",
 ]
