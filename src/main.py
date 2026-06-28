@@ -9,8 +9,8 @@ from src import *  # noqa: F403
 from src.config_manager import Config
 from src.drivers import Drivers
 from src.processes import ProcessConfig, SharedResources
-from src.rc_control import RCControlProcess
-from src.trajectory_calculator import TrajectoryCalculatorProcess
+from src.processes import RCControlProcess
+from src.processes import TrajectoryCalculatorProcess
 from src.trajectories import TrajectoryStrategies
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
