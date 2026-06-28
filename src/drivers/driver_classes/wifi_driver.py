@@ -25,5 +25,6 @@ class WifiDriver(Driver):
     @override
     def stop(self) -> None:
         super().stop()
-        self.tcp_client.shutdown(socket.SHUT_RDWR)
-        self.tcp_client.close()
+        if self.process_name == ProcessNames.RC_CONTROL:
+            self.tcp_client.shutdown(socket.SHUT_RDWR)
+            self.tcp_client.close()

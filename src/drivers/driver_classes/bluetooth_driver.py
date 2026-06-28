@@ -33,11 +33,13 @@ class BluetoothDriver(Driver):
 
     async def _send_ble(self, command: Command) -> None:
         """Coroutine asyncio : écrit la commande sur la caractéristique GATT BLE."""
+        if not self.client.is_connected: await self.client.connect()
         await self.client.write_gatt_char(self.config.protocols.bluetooth.char_uuid, bytes(command))
 
     @override
     def stop(self) -> None:
         super().stop()
+        if self.process_name == ProcessNames.TRAJECTORY_CALCULATOR: return
 
         # 1. Planifie la déconnexion
         future = asyncio.run_coroutine_threadsafe(self.client.disconnect(), self.loop)

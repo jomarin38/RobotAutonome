@@ -28,4 +28,4 @@ class I2CDriver(Driver):
     @override
     def stop(self) -> None:
         super().stop()
-        self.i2c_bus.close()
+        if self.process_name == ProcessNames.RC_CONTROL: self.i2c_bus.close()

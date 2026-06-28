@@ -35,4 +35,4 @@ class SerialDriver(Driver):
     @override
     def stop(self):
         super().stop()
-        self.serial_bus.close()
+        if self.process_name == ProcessNames.RC_CONTROL: self.serial_bus.close()
