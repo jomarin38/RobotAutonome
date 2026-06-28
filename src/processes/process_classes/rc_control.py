@@ -105,7 +105,7 @@ class RCControlProcess(RobotProcess):
     @override
     def _run_impl(self) -> None:
         self._initialize_buffers()
-        running = self.driver.send_command(Command(None, None, None))
+        running = self.driver.send_command(Command(0, 0, 0))
 
         while not self.shared.stop_event.is_set():
             with self.shared.shared_sim_points_lock:
@@ -117,7 +117,7 @@ class RCControlProcess(RobotProcess):
                 break
 
             if not self.driver.has_target():
-                running = self.driver.send_command(Command(None, None, None))
+                running = self.driver.send_command(Command(0, 0, 0))
                 continue
 
             self._update_buffers()
@@ -125,20 +125,20 @@ class RCControlProcess(RobotProcess):
 
             forward_command = (
                 self.get_active_command(self.current_buffers.forward, current_time, self._buffer_start_time)
-                if self.current_buffers and len(self.current_buffers.forward) > 0 else None
+                if self.current_buffers and len(self.current_buffers.forward) > 0 else 0
             )
             translate_command = (
                 self.get_active_command(self.current_buffers.translate, current_time, self._buffer_start_time)
-                if self.current_buffers and len(self.current_buffers.translate) > 0 else None
+                if self.current_buffers and len(self.current_buffers.translate) > 0 else 0
             )
             rotate_command = (
                 self.get_active_command(self.current_buffers.rotate, current_time, self._buffer_start_time)
-                if self.current_buffers and len(self.current_buffers.rotate) > 0 else None
+                if self.current_buffers and len(self.current_buffers.rotate) > 0 else 0
             )
 
             running = self.driver.send_command(
                 Command(
-                    rotate=-rotate_command if rotate_command else None,
+                    rotate=-rotate_command if rotate_command else 0,
                     forward=forward_command,
                     translate=translate_command,
                 ),

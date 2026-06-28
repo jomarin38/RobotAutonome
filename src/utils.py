@@ -92,11 +92,12 @@ class Observation(DataClassUtils):
 @dataclass(frozen=True)
 class Command(DataClassUtils):
     """Commande de mouvement : forward, translate, rotate."""
-    forward: Optional[float]
-    translate: Optional[float]
-    rotate: Optional[float]
+    forward: float #Optional[float]
+    translate: float #Optional[float]
+    rotate: float #Optional[float]
 
     def __bytes__(self) -> bytes:
+        #assert None not in (self.forward, self.translate, self.rotate)
         return struct.pack(">hhh", *self.astuple())
 
 

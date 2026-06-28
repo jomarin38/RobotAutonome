@@ -211,9 +211,9 @@ class Sim:
 
     def move(
         self,
-        rotate: Optional[float] = None,
-        forward: Optional[float] = None,
-        translate: Optional[float] = None,
+        rotate: float = 0,
+        forward: float = 0,
+        translate: float = 0,
     ) -> tuple[bool, Observation]:
         """Applique une consigne de mouvement avec patinage (blend vers la consigne).
 
@@ -225,15 +225,9 @@ class Sim:
 
         result = self.update()
 
-        # Blender vers la consigne : speed_new = speed * alpha + cmd * (1 - alpha)
-        # None → cmd = 0 → décroissance exponentielle vers 0 (même formule que l'inertie)
-        cmd_rotate = rotate if rotate is not None else 0.0
-        cmd_forward = forward if forward is not None else 0.0
-        cmd_translate = translate if translate is not None else 0.0
-
-        self.rotate_speed = self.rotate_speed * self.inertia_factor_rotate + cmd_rotate * (1.0 - self.inertia_factor_rotate)
-        self.forward_speed = self.forward_speed * self.inertia_factor_forward + cmd_forward * (1.0 - self.inertia_factor_forward)
-        self.translate_speed = self.translate_speed * self.inertia_factor_translate + cmd_translate * (1.0 - self.inertia_factor_translate)
+        self.rotate_speed = self.rotate_speed * self.inertia_factor_rotate + rotate * (1.0 - self.inertia_factor_rotate)
+        self.forward_speed = self.forward_speed * self.inertia_factor_forward + forward * (1.0 - self.inertia_factor_forward)
+        self.translate_speed = self.translate_speed * self.inertia_factor_translate + translate * (1.0 - self.inertia_factor_translate)
 
         if self.redis is not None:
             self.redis.set('robot_x', self.robot.x)
