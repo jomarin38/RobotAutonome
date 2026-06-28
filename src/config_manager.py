@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RedisConfig(BaseModel):
@@ -74,9 +74,9 @@ class MovementCoeffConfig(BaseModel):
 
 class InertiaFactorConfig(BaseModel):
     """Facteurs d'inertie (patinage) par axe, entre 0.0 (aucun) et 1.0 (maximum)."""
-    forward: float = 0.0
-    translate: float = 0.0
-    rotate: float = 0.0
+    forward: float = Field(default=0.0, ge=0.0, le=1.0)
+    translate: float = Field(default=0.0, ge=0.0, le=1.0)
+    rotate: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class LoggerConfig(BaseModel):
