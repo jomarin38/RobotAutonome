@@ -70,7 +70,7 @@ def compute_trajectory_core(
     forward_command_speed = 0
     current_time_forward = current_time_rotate
     if target_distance >= 10:
-        forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(target_distance), 1e-4) * forward_scale / dt)
+        forward_command_speed = min(MAX_FORWARD_SPEED, max(abs(target_distance), 1e-4) * forward_scale / max(dt, 1e-4))
         current_time_forward = current_time_rotate + target_distance / forward_command_speed * forward_scale
 
     # 5) Heuristique d'inertie : prédit la position future du robot pour compenser l'inertie
