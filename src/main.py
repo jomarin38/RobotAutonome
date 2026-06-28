@@ -5,13 +5,13 @@ from pathlib import Path
 from loguru import logger
 from redis import StrictRedis
 
-from src import *  # noqa: F403
 from src.config_manager import Config
 from src.drivers import Drivers
 from src.processes import ProcessConfig, SharedResources
 from src.processes import RCControlProcess
 from src.processes import TrajectoryCalculatorProcess
 from src.trajectories import TrajectoryStrategies
+from src.utils import bind_context
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value

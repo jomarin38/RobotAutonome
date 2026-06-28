@@ -2,8 +2,8 @@ import copy
 import time
 from typing import Optional, override
 
-from src import *  # noqa: F403
-from src.processes import RobotProcess, ProcessConfig, SharedResources
+from ..robot_process import RobotProcess, SharedResources, ProcessConfig
+from src.utils import AllCommandBuffers, ProcessNames, CommandBuffer, Command
 
 
 class RCControlProcess(RobotProcess):

@@ -2,10 +2,11 @@ import time
 from math import cos, sqrt, pi, atan2, sin
 from typing import override
 
+from loguru import logger
 from numba import njit
 
-from src.utils import Position, AllCommandBuffers, CommandBuffer, CommandBufferItem, logger
-from src.trajectories.trajectory_strategy import TrajectoryStrategy
+from src.utils import Position, AllCommandBuffers, CommandBuffer, CommandBufferItem
+from ..trajectory_strategy import TrajectoryStrategy
 
 DEBUG = False
 

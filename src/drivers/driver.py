@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Literal, Optional, cast
 
+from loguru import logger
 from redis import StrictRedis
 
 from src.config_manager import Config
-from src.utils import ProcessNames, Position, Command, SimPoint, logger
+from src.utils import ProcessNames, Position, Command, SimPoint
 
 
 class Driver(ABC):

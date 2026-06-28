@@ -10,7 +10,6 @@ from multiprocessing.managers import ListProxy
 from typing import Optional, TYPE_CHECKING, Any, Protocol
 
 from colorama import init
-from loguru import logger
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonTracebackLexer
@@ -18,10 +17,7 @@ from pygments.lexers import PythonTracebackLexer
 init()  # IMPORTANT pour Windows CMD (active les codes ANSI dans le terminal)
 
 if TYPE_CHECKING:
-    from .simulateur import Sim
     from loguru import Record
-
-from .config_manager import *
 
 # ============================================================================
 # ÉNUMÉRATIONS

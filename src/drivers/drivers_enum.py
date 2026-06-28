@@ -1,6 +1,7 @@
 from enum import Enum
 
-from .driver_classes import Driver, SimDriver, SerialDriver, I2CDriver, BluetoothDriver, WifiDriver
+from .driver import Driver
+from .driver_classes import SimDriver, SerialDriver, I2CDriver, BluetoothDriver, WifiDriver
 
 
 class Drivers(Enum):

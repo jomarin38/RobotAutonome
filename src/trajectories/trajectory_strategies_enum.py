@@ -1,7 +1,7 @@
 from enum import Enum
 
-from src.trajectories.trajectory_strategy import TrajectoryStrategy
-from src.trajectories.strategy_classes import TurnThenMoveStrategy, ForwardAndTranslate
+from .trajectory_strategy import TrajectoryStrategy
+from .strategy_classes import TurnThenMoveStrategy, ForwardAndTranslate
 
 
 class TrajectoryStrategies(Enum):

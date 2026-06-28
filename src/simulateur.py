@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, cast
 
+from src.utils import Position, SimPoint, Observation
+
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 from redis import StrictRedis
-
-from src import *  # noqa: F403
 
 class RobotBase(ABC):
     """Interface de base définissant les attributs de position du robot."""

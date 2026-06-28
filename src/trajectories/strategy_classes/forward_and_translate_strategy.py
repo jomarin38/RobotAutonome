@@ -1,10 +1,11 @@
 import time
 from typing import override
 
+from loguru import logger
 from numba import njit
 
-from src.utils import Position, AllCommandBuffers, CommandBuffer, CommandBufferItem, SimPoint, Color, logger
-from src.trajectories.trajectory_strategy import TrajectoryStrategy
+from src.utils import Position, AllCommandBuffers, CommandBuffer, CommandBufferItem, SimPoint, Color
+from ..trajectory_strategy import TrajectoryStrategy
 
 DEBUG = False
 

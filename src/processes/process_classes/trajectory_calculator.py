@@ -5,8 +5,10 @@ from typing import cast, Optional, override
 from loguru import logger
 
 from src import *  # noqa: F403
-from src.processes import RobotProcess, ProcessConfig, SharedResources
+from ..robot_process import RobotProcess, SharedResources, ProcessConfig
 from src.trajectories import TrajectoryStrategy, StrategyConfig
+from src.utils import PreviousPosition, Position, SimPoint, ProcessNames, AllCommandBuffers
+
 
 class TrajectoryCalculatorProcess(RobotProcess):
     """Processus de calcul de trajectoire.
