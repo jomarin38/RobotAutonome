@@ -1,7 +1,7 @@
 from enum import Enum
 
 from src.trajectories.trajectory_strategy import TrajectoryStrategy
-from src.trajectories.strategy_classes import TurnThenMoveStrategy, MixedMovementStrategy
+from src.trajectories.strategy_classes import TurnThenMoveStrategy, ForwardAndTranslate
 
 
 class TrajectoryStrategies(Enum):
@@ -12,4 +12,4 @@ class TrajectoryStrategies(Enum):
     TURN_THEN_MOVE = TurnThenMoveStrategy
 
     # Stratégie moderne : mouvement mixte simultané
-    MIXED_MOVEMENT = MixedMovementStrategy
+    FORWARD_AND_TRANSLATE = ForwardAndTranslate

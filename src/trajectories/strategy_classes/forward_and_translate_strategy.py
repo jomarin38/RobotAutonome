@@ -111,7 +111,7 @@ def compute_trajectory_independent_axes(
     )
 
 
-class MixedMovementStrategy(TrajectoryStrategy):
+class ForwardAndTranslate(TrajectoryStrategy):
     """Stratégie moderne : mouvement mixte simultané.
 
     Cette stratégie calcule les mouvements d'avance et de translation indépendamment
