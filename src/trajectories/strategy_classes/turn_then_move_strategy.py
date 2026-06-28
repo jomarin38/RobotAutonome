@@ -173,7 +173,7 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
         forward_buffer.append(CommandBufferItem(finish_time=current_time_rotate, command=0))
 
         # Puis avance après la rotation (décalée temporellement)
-        if inertie_to_target_delta > 0:
+        if inertie_to_target_delta > 0 or True:
             forward_buffer.append(CommandBufferItem(
                 finish_time=current_time_forward,
                 command=forward_command_speed,

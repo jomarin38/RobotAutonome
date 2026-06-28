@@ -190,13 +190,13 @@ class MixedMovementStrategy(TrajectoryStrategy):
         ))
 
         # Construction des buffers simultanément (mouvement mixte)
-        if x_inertia_drift_delta > 0:
+        if x_inertia_drift_delta > 0 or True:
             translate_buffer.append(CommandBufferItem(
                 finish_time=translate_finish_time,
                 command=translate_command_speed * x_dir,
             ))
 
-        if y_inertia_drift_delta > 0:
+        if y_inertia_drift_delta > 0 or True:
             forward_buffer.append(CommandBufferItem(
                 finish_time=forward_finish_time,
                 command=forward_command_speed * y_dir,
