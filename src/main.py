@@ -17,10 +17,13 @@ CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
 trajectory_strategy_class = TrajectoryStrategies.TURN_THEN_MOVE.value
 
+log_dir_path = Path(__file__).parent.parent / "logs"
+log_dir_path.mkdir(parents=True, exist_ok=True)
+
 logger.remove()
 logger.configure(patcher=bind_context)
 logger.add(
-    Path(__file__).parent.parent / "logs" / "latest.log",
+    log_dir_path / "latest.log",
     format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
