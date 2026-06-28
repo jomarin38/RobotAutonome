@@ -1,4 +1,3 @@
-from .driver import *
 from .sim_driver import *
 from .serial_driver import *
 from .i2c_driver import *

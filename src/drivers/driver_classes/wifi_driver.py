@@ -4,7 +4,7 @@ from typing import Literal, override
 from src.config_manager import Config
 from src.utils import ProcessNames, Command
 
-from .driver import Driver
+from driver import Driver
 
 
 class WifiDriver(Driver):
