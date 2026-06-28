@@ -125,7 +125,7 @@ class TrajectoryCalculatorProcess(RobotProcess):
             self._current_time = time.time()
 
             target_position = self.driver.get_target_position()
-            if not self.driver.has_target():
+            if target_position is None:
                 continue
 
             self.robot_position = self.driver.get_robot_position()

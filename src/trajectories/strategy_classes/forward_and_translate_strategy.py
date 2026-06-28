@@ -13,7 +13,7 @@ MAX_FORWARD_SPEED: float = 100.0
 MAX_TRANSLATE_SPEED: float = 100.0
 
 
-@njit(cache=True)
+@njit(cache=True, fastmath=True)
 def compute_inertia_drift_delta(
         previous_position: float,
         current_position: float,
@@ -50,7 +50,7 @@ def compute_inertia_drift_delta(
     return (target_position - predicted_stop_pos) * direction_sign
 
 
-@njit(cache=True)
+@njit(cache=True, fastmath=True)
 def compute_trajectory_core(
         dt: float,
         x_target: float,

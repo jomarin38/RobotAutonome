@@ -14,7 +14,7 @@ MAX_FORWARD_SPEED: float = 100.0
 MAX_ROTATE_SPEED: float = 100.0
 
 
-@njit(cache=True)
+@njit(cache=True, fastmath=True)
 def compute_trajectory_core(
     dt: float,
     x_target: float,
