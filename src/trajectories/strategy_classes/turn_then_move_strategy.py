@@ -14,7 +14,7 @@ MAX_ROTATE_SPEED: float = 100.0
 
 
 @njit(cache=True)
-def compute_trajectory_with_rotation(
+def compute_trajectory_core(
     dt: float,
     x_target: float,
     y_target: float,
@@ -148,7 +148,7 @@ class TurnThenMoveStrategy(TrajectoryStrategy):
             current_time_forward,
             inertie_to_target_delta,
             angle_sign,
-        ) = compute_trajectory_with_rotation(
+        ) = compute_trajectory_core(
             dt,
             float(target_position.x),
             float(target_position.y),

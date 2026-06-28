@@ -50,7 +50,7 @@ def compute_inertia_drift_delta(
 
 
 @njit(cache=True)
-def compute_trajectory_independent_axes(
+def compute_trajectory_core(
         dt: float,
         x_target: float,
         y_target: float,
@@ -162,7 +162,7 @@ class ForwardAndTranslate(TrajectoryStrategy):
             y_inertia_drift_delta,
             x_dir,
             y_dir,
-        ) = compute_trajectory_independent_axes(
+        ) = compute_trajectory_core(
             dt,
             float(target_position.x),
             float(target_position.y),
