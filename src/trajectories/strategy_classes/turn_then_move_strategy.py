@@ -86,7 +86,7 @@ def compute_trajectory_core(
             if inertia_factor >= 1.0:
                 total_dist = actual_speed
             else:
-                total_dist = actual_speed * dt / (1.0 - inertia_factor)
+                total_dist = actual_speed * dt_mesure / (1.0 - inertia_factor)
 
             current_direction_rad = current_direction_deg * pi / 180.0
             inertie_pos_predicted_x = x_position + total_dist * cos(current_direction_rad)

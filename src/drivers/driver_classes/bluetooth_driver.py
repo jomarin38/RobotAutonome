@@ -37,8 +37,20 @@ class BluetoothDriver(Driver):
 
     @override
     def stop(self) -> None:
-        """Arrête le driver BLE : déconnecte le client et stoppe la boucle asyncio."""
         super().stop()
-        asyncio.run_coroutine_threadsafe(self.client.disconnect(), self.loop)
-        self.loop.stop()
+
+        # 1. Planifie la déconnexion
+        future = asyncio.run_coroutine_threadsafe(self.client.disconnect(), self.loop)
+
+        # 2. Attends la fin de la déconnexion
+        try:
+            future.result(timeout=5)  # ou None si tu veux bloquer indéfiniment
+        except Exception as e:
+            print(f"Erreur lors de la déconnexion BLE: {e}")
+
+        # 3. Stoppe proprement la boucle asyncio
+        # noinspection PyTypeChecker
+        self.loop.call_soon_threadsafe(self.loop.stop)
+
+        # 4. Attend la fin du thread
         self.thread.join()
