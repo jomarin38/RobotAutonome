@@ -4,7 +4,8 @@ import copy
 import struct
 import traceback
 from abc import ABC
-from dataclasses import dataclass, asdict, astuple
+from pydantic.dataclasses import dataclass
+from dataclasses import asdict, astuple
 from enum import Enum
 from multiprocessing.managers import ListProxy
 from typing import Optional, TYPE_CHECKING, Any, Protocol
