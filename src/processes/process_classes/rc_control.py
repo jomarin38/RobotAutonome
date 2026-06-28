@@ -138,7 +138,7 @@ class RCControlProcess(RobotProcess):
 
             running = self.driver.send_command(
                 Command(
-                    rotate=-rotate_command if rotate_command else 0,
+                    rotate=rotate_command,
                     forward=forward_command,
                     translate=translate_command,
                 ),

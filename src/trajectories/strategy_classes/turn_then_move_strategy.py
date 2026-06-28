@@ -54,7 +54,6 @@ def compute_trajectory_core(
     # 2) Delta angle (alignement vers la cible)
     delta_angle = target_direction - current_direction_deg * pi / 180.0
     delta_angle = (delta_angle + pi) % (2 * pi) - pi
-    delta_angle = -delta_angle
 
     # Signe (même logique que `calculate_angle_sign`)
     abs_delta_angle = abs(delta_angle)
