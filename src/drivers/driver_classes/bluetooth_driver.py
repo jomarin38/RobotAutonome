@@ -36,9 +36,9 @@ class BluetoothDriver(Driver):
         await self.client.write_gatt_char(self.config.protocols.bluetooth.char_uuid, bytes(command))
 
     @override
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Arrête le driver BLE : déconnecte le client et stoppe la boucle asyncio."""
         super().stop()
-        await self.client.disconnect()
+        asyncio.run_coroutine_threadsafe(self.client.disconnect(), self.loop)
         self.loop.stop()
         self.thread.join()
