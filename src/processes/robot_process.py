@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from multiprocessing import Process
-from multiprocessing.managers import ValueProxy, ListProxy
+from multiprocessing.managers import ValueProxy, ListProxy, DictProxy
 from multiprocessing.synchronize import Lock as MpLock, Event as MpEvent
 from pathlib import Path
 from typing import Optional, cast
@@ -25,9 +25,7 @@ class SharedResources:
     """Ressources partagées entre les processus via multiprocessing.Manager."""
     stop_event: MpEvent
     process_exit_code: ValueProxy[int]
-    forward_command_buffer: ListProxy[CommandBufferItem]
-    translate_command_buffer: ListProxy[CommandBufferItem]
-    rotate_command_buffer: ListProxy[CommandBufferItem]
+    command_buffers: DictProxy[str, list[CommandBufferItem]]
     shared_sim_points: ListProxy[SimPoint]
     command_buffers_lock: MpLock
     shared_sim_points_lock: MpLock

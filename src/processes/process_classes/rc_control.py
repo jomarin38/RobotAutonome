@@ -78,20 +78,12 @@ class RCControlProcess(RobotProcess):
         """Capture initiale des buffers pour détecter les changements de consigne."""
         self._buffer_start_time = time.time()
         with self.shared.command_buffers_lock:
-            self.previous_buffers = AllCommandBuffers(
-                forward=copy.deepcopy(list(self.shared.forward_command_buffer)),
-                translate=copy.deepcopy(list(self.shared.translate_command_buffer)),
-                rotate=copy.deepcopy(list(self.shared.rotate_command_buffer)),
-            )
+            self.previous_buffers = AllCommandBuffers(**copy.deepcopy(dict(self.shared.command_buffers)))
 
     def _update_buffers(self) -> None:
         """Lit les buffers partagés et détecte les changements."""
         with self.shared.command_buffers_lock:
-            self.current_buffers = AllCommandBuffers(
-                forward=copy.deepcopy(list(self.shared.forward_command_buffer)),
-                translate=copy.deepcopy(list(self.shared.translate_command_buffer)),
-                rotate=copy.deepcopy(list(self.shared.rotate_command_buffer)),
-            )
+            self.current_buffers = AllCommandBuffers(**copy.deepcopy(dict(self.shared.command_buffers)))
 
         if self.current_buffers != self.previous_buffers:
             self._buffer_start_time = time.time()

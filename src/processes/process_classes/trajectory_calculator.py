@@ -87,9 +87,8 @@ class TrajectoryCalculatorProcess(RobotProcess):
     def _update_command_buffers(self, command_buffers: AllCommandBuffers) -> None:
         """Écrit les buffers de commandes dans le partage multiprocessing."""
         with self.shared.command_buffers_lock:
-            self.shared.forward_command_buffer[:] = command_buffers.forward
-            self.shared.translate_command_buffer[:] = command_buffers.translate
-            self.shared.rotate_command_buffer[:] = command_buffers.rotate
+            self.shared.command_buffers.clear()
+            self.shared.command_buffers.update(command_buffers.asdict())
 
     def _planify_trajectory(
             self,

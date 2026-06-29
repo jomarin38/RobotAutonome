@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import sys
 from pathlib import Path
+import time
 
 from loguru import logger
 from redis import StrictRedis
@@ -12,6 +13,7 @@ from src.processes import RCControlProcess
 from src.processes import TrajectoryCalculatorProcess
 from src.trajectories import TrajectoryStrategies
 from src.utils import bind_context
+from utils import AllCommandBuffers, CommandBufferItem
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
@@ -64,13 +66,20 @@ def main() -> None:
 
     stop_event = mp.Event()
     process_exit_code = manager.Value("i", 0)
+    
+    command_buffers = manager.dict()
+    command_buffers.update(
+        AllCommandBuffers(
+            forward=[CommandBufferItem(finish_time=time.time(), command=0),],
+            translate=[CommandBufferItem(finish_time=time.time(), command=0),],
+            rotate=[CommandBufferItem(finish_time=time.time(), command=0),]
+        ).asdict()
+    )
 
     shared_resources = SharedResources(
         stop_event=stop_event,
         process_exit_code=process_exit_code,
-        forward_command_buffer=manager.list(),
-        translate_command_buffer=manager.list(),
-        rotate_command_buffer=manager.list(),
+        command_buffers=command_buffers,
         shared_sim_points=manager.list(),
         command_buffers_lock=mp.Lock(),
         shared_sim_points_lock=mp.Lock(),
