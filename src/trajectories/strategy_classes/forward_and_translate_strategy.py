@@ -121,12 +121,6 @@ class ForwardAndTranslate(TrajectoryStrategy):
 
     def __init__(self, config) -> None:
         super().__init__(config)
-        self._sim_points: list[SimPoint] = []
-
-    @property
-    def sim_points(self) -> list[SimPoint]:
-        """Points de debug pour l'affichage dans le simulateur."""
-        return self._sim_points
 
     @override
     def compute(
@@ -146,7 +140,7 @@ class ForwardAndTranslate(TrajectoryStrategy):
         y_mesure = measured_position.y
 
         # Reset des points de debug
-        self._sim_points = []
+        self.sim_points = []
 
         current_time = time.time()
         dt = current_time - self.previous_time
@@ -179,7 +173,7 @@ class ForwardAndTranslate(TrajectoryStrategy):
         )
 
         # Ajout d'un point de debug pour l'inertie
-        self._sim_points.append(SimPoint(
+        self.sim_points.append(SimPoint(
             name="target_point",
             position=Position(
                 x=target_position.x,

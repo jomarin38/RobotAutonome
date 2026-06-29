@@ -2,11 +2,11 @@ import time
 from math import sqrt
 from pathlib import Path
 
-from config_manager import Config
-from drivers import Driver
+from src.config_manager import Config
+from src.drivers import Driver
 from src.drivers import Drivers
 from src.utils import Command
-from utils import ProcessNames
+from src.utils import ProcessNames
 
 driver_class = Drivers.WIFI.value
 

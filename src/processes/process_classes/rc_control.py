@@ -14,7 +14,7 @@ class RCControlProcess(RobotProcess):
     """
 
     def __init__(self, shared: SharedResources, config: ProcessConfig) -> None:
-        super().__init__(shared, config)
+        super().__init__(shared, config, daemon=True)
         self._buffer_start_time = time.time()
         self._previous_buffers: Optional[AllCommandBuffers] = None
         self._current_buffers: Optional[AllCommandBuffers] = None
@@ -100,11 +100,6 @@ class RCControlProcess(RobotProcess):
         running = self.driver.send_command(Command(0, 0, 0))
 
         while not self.shared.stop_event.is_set():
-            with self.shared.shared_sim_points_lock:
-                sim_points = copy.deepcopy(list(self.shared.shared_sim_points))
-
-            self.driver.add_all_sim_points(sim_points)
-
             if not running:
                 break
 

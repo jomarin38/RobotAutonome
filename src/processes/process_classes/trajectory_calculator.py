@@ -4,7 +4,7 @@ from typing import cast, Optional, override
 
 from loguru import logger
 
-from utils import LoggerUtils
+from src.utils import LoggerUtils
 from ..robot_process import RobotProcess, SharedResources, ProcessConfig
 from src.trajectories import TrajectoryStrategy, StrategyConfig
 from src.utils import PreviousPosition, Position, SimPoint, ProcessNames, AllCommandBuffers
@@ -22,7 +22,7 @@ class TrajectoryCalculatorProcess(RobotProcess):
         self._position_history: Optional[deque[PreviousPosition]] = None
         self._robot_position: Optional[Position] = None
         self._current_time = time.time()
-        self._sim_points: list[SimPoint] = []
+        self.sim_points: list[SimPoint] = []
         self._strategy_class = strategy_class
         self._strategy: Optional[TrajectoryStrategy] = None
 
@@ -104,10 +104,6 @@ class TrajectoryCalculatorProcess(RobotProcess):
             dt_mesure=dt_mesure,
         )
 
-        # Si la stratégie fournit des points de debug (cas MixedMovementStrategy)
-        if hasattr(self.strategy, 'sim_points'):
-            self._sim_points.extend(self.strategy.sim_points)
-
         return command_buffers
 
     @override
@@ -120,7 +116,7 @@ class TrajectoryCalculatorProcess(RobotProcess):
         while not self.shared.stop_event.is_set():
             time.sleep(0.02)
 
-            self._sim_points = []
+            self.sim_points = []
             self._current_time = time.time()
 
             target_position = self.driver.get_target_position()
@@ -144,5 +140,4 @@ class TrajectoryCalculatorProcess(RobotProcess):
 
             self._update_command_buffers(command_buffers)
 
-            with self.shared.shared_sim_points_lock:
-                self.shared.shared_sim_points[:] = self._sim_points.copy()
+            self.driver.add_all_sim_points(self.sim_points)

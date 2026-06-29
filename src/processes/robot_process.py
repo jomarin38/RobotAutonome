@@ -1,15 +1,22 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+
 from dataclasses import dataclass
 from multiprocessing import Process
 from multiprocessing.managers import ValueProxy, ListProxy, DictProxy
 from multiprocessing.synchronize import Lock as MpLock, Event as MpEvent
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional, cast, TYPE_CHECKING
 
+import rpyc
 from loguru import logger
 
-from src.config_manager import Config
+if TYPE_CHECKING:
+    from loguru import Logger
+
 from src.drivers import Driver
+from src.config_manager import Config
 from src.utils import CommandBufferItem, SimPoint, ProcessNames, LoggerUtils
 
 
@@ -17,8 +24,6 @@ from src.utils import CommandBufferItem, SimPoint, ProcessNames, LoggerUtils
 class ProcessConfig:
     """Configuration pour un processus robot."""
     config_file_path: Path
-    driver_class: type[Driver]
-
 
 @dataclass
 class SharedResources:
@@ -40,12 +45,35 @@ class RobotProcess(Process, ABC):
 
     def __init__(self, shared: SharedResources, config: ProcessConfig, daemon: bool = False) -> None:
         super().__init__(daemon=daemon)
+
         self._shared = shared
         self._config_path = config.config_file_path
-        self._driver_class = config.driver_class
 
         self._config: Optional[Config] = None
         self._driver: Optional[Driver] = None
+
+        self._logger: Optional[Logger] = None
+        
+    @property
+    def logger(self) -> Logger:
+        if self._logger is None:
+            self._logger = logger.bind(cls=self.__class__.__name__)
+        return cast(Logger, self._logger)
+
+    @property
+    def driver(self) -> Driver:
+        if self._driver is None:
+            rpyc_config = {
+                "allow_public_attrs": True,
+                "allow_all_attrs": True,
+                "allow_getattr": True,
+                "allow_safe_attrs": True,
+                "safe_attrs": set(),
+                "include_local_traceback": True,
+            }
+            self._driver = rpyc.connect("localhost", 18861, config=rpyc_config).root.driver()
+        return cast(Driver, self._driver)
+
 
     @property
     def shared(self) -> SharedResources:
@@ -58,13 +86,6 @@ class RobotProcess(Process, ABC):
         if self._config is None:
             self._config = Config.load_from_yml(self._config_path)
         return cast(Config, self._config)
-
-    @property
-    def driver(self) -> Driver:
-        """Driver initialisé pour ce processus."""
-        if self._driver is None:
-            self._driver = self._driver_class(self.config, self.process_name)
-        return cast(Driver, self._driver)
 
     @property
     @abstractmethod

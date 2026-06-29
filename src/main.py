@@ -1,11 +1,14 @@
 import multiprocessing as mp
 import sys
+import threading
 from pathlib import Path
 import time
 
 from loguru import logger
 from redis import StrictRedis
 
+from src.drivers import run_driver_server
+from src.drivers import Driver
 from src.config_manager import Config
 from src.drivers import Drivers
 from src.processes import ProcessConfig, SharedResources
@@ -13,11 +16,14 @@ from src.processes import RCControlProcess
 from src.processes import TrajectoryCalculatorProcess
 from src.trajectories import TrajectoryStrategies
 from src.utils import bind_context
-from utils import AllCommandBuffers, CommandBufferItem
+from src.utils import AllCommandBuffers, CommandBufferItem
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
 driver_class = Drivers.SIM.value
 trajectory_strategy_class = TrajectoryStrategies.TURN_THEN_MOVE.value
+
+def create_driver(config: Config) -> Driver:
+    return driver_class(config)
 
 log_dir_path = Path(__file__).parent.parent / "logs"
 log_dir_path.mkdir(parents=True, exist_ok=True)
@@ -87,12 +93,12 @@ def main() -> None:
 
     process_config = ProcessConfig(
         config_file_path=CONFIG_FILE,
-        driver_class=driver_class,
-
     )
 
     logger.info("Manager et variables partagées initialisés.")
     logger.info("Lancement des processus...")
+
+    threading.Thread(target=run_driver_server, args=(driver_class, CONFIG_FILE), daemon=True).start()
 
     trajectory_calculator_process = TrajectoryCalculatorProcess(shared_resources, process_config, trajectory_strategy_class)
     trajectory_calculator_process.start()

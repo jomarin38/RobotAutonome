@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+
+from loguru import logger
+from pydantic.dataclasses import dataclass
 
 import time
 
-from src.utils import Position, AllCommandBuffers
+from src.utils import Position, AllCommandBuffers, SimPoint
 from src.config_manager import MovementCoeffConfig, InertiaFactorConfig
 
 
@@ -33,6 +35,8 @@ class TrajectoryStrategy(ABC):
         """
         self.config = config
         self.previous_time = time.time()
+        self.sim_points: list[SimPoint] = []
+        self.logger = logger.bind(cls=self.__class__.__name__)
 
     @abstractmethod
     def compute(

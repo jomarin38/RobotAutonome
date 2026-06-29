@@ -19,6 +19,7 @@ init()  # IMPORTANT pour Windows CMD (active les codes ANSI dans le terminal)
 
 if TYPE_CHECKING:
     from loguru import Record
+    from src.drivers import Driver
 
 # ============================================================================
 # ÉNUMÉRATIONS
@@ -93,9 +94,9 @@ class Observation(DataClassUtils):
 @dataclass(frozen=True)
 class Command(DataClassUtils):
     """Commande de mouvement : forward, translate, rotate."""
-    forward: float #Optional[float]
-    translate: float #Optional[float]
-    rotate: float #Optional[float]
+    forward: float
+    translate: float
+    rotate: float
 
     def __bytes__(self) -> bytes:
         #assert None not in (self.forward, self.translate, self.rotate)
@@ -139,6 +140,23 @@ class LoggerUtils:
             PythonTracebackLexer(),
             TerminalFormatter()
         )
+    
+    
+class LockedProxy[T: Driver]:
+    def __init__(self, obj: T):
+        self._obj = obj
+        self._lock = obj._lock
+
+    def __getattr__(self, name):
+        attr = getattr(self._obj, name)
+
+        if callable(attr):
+            def wrapped(*args, **kwargs):
+                with self._lock:
+                    return attr(*args, **kwargs)
+            return wrapped
+
+        return attr
 
 
 # ============================================================================

@@ -19,6 +19,7 @@ dependencies = [
     "bleak>=3.0.2,<4.0.0",
     "loguru>=0.7.3",
     "smbus2>=0.6.1",
+    "rpyc>=6.0.2",
 ]
 
 [project.scripts]

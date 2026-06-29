@@ -1,11 +1,11 @@
 import asyncio
 import threading
-from typing import Literal, override
+from typing import override
 
 from bleak import BleakClient
 
 from src.config_manager import Config
-from src.utils import ProcessNames, Command
+from src.utils import Command
 
 from ..driver import Driver
 
@@ -17,18 +17,19 @@ class BluetoothDriver(Driver):
     les conflits avec la boucle principale.
     """
 
-    def __init__(self, config: Config, process_name: Literal[ProcessNames.TRAJECTORY_CALCULATOR, ProcessNames.RC_CONTROL]):
-        super().__init__(config, process_name)
+    def __init__(self, config: Config):
+        super().__init__(config)
 
-        if process_name == ProcessNames.RC_CONTROL:
-            self.loop = asyncio.new_event_loop()
-            self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
-            self.thread.start()  # démarre la boucle asyncio dans le thread dédié
-            self.client = BleakClient(self.config.protocols.bluetooth.address)
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.thread.start()  # démarre la boucle asyncio dans le thread dédié
+        self.client = BleakClient(self.config.protocols.bluetooth.address)
 
     @override
-    def _send_command(self, command: Command) -> bool:
+    def send_command(self, command: Command) -> bool:
+        command = Command(command.rotate, command.forward, command.translate)
         asyncio.run_coroutine_threadsafe(self._send_ble(command), self.loop)
+
         return True
 
     async def _send_ble(self, command: Command) -> None:
@@ -39,7 +40,6 @@ class BluetoothDriver(Driver):
     @override
     def stop(self) -> None:
         super().stop()
-        if self.process_name == ProcessNames.TRAJECTORY_CALCULATOR: return
 
         # 1. Planifie la déconnexion
         future = asyncio.run_coroutine_threadsafe(self.client.disconnect(), self.loop)

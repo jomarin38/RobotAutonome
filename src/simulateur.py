@@ -2,7 +2,9 @@ import math
 import os
 import time
 from abc import ABC
-from dataclasses import dataclass
+
+from loguru import logger
+from pydantic.dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, cast
 
@@ -134,6 +136,8 @@ class Sim:
 
         self.is_reset = False
 
+        self.logger = logger.bind(cls=self.__class__.__name__)
+
     def reset(self, initial_position: Position) -> tuple[bool, Observation]:
         """Réinitialise le simulateur et place le robot à la position de départ."""
 
@@ -256,6 +260,7 @@ class Sim:
         Le blend/decay est géré par move() — update() n'applique que le déplacement.
         """
         assert self.robot is not None
+
         self._move(self.rotate_speed, self.forward_speed, self.translate_speed)
 
         # Traitement des événements Pygame
@@ -319,6 +324,7 @@ class Sim:
             point_label = self.font.render(sim_point.name, True, (0, 0, 0))
             self.window.blit(point_label, (sim_point.position.x + 30, sim_point.position.y - 45))
 
+        self.logger.debug("update")
         pygame.display.update()
         return self.running
 
