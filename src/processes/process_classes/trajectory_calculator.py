@@ -4,7 +4,7 @@ from typing import cast, Optional, override
 
 from loguru import logger
 
-from utils import LoggerUtils
+from src.utils import LoggerUtils
 from ..robot_process import RobotProcess, SharedResources, ProcessConfig
 from src.trajectories import TrajectoryStrategy, StrategyConfig
 from src.utils import PreviousPosition, Position, SimPoint, ProcessNames, AllCommandBuffers

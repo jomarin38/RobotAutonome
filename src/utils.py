@@ -99,7 +99,7 @@ class Command(DataClassUtils):
 
     def __bytes__(self) -> bytes:
         #assert None not in (self.forward, self.translate, self.rotate)
-        return struct.pack(">hhh", *self.astuple())
+        return struct.pack(">iii", int(self.forward), int(self.translate), int(self.rotate))
 
 
 @dataclass(frozen=True)

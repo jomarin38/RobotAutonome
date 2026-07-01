@@ -13,11 +13,11 @@ from src.processes import RCControlProcess
 from src.processes import TrajectoryCalculatorProcess
 from src.trajectories import TrajectoryStrategies
 from src.utils import bind_context
-from utils import AllCommandBuffers, CommandBufferItem
+from src.utils import AllCommandBuffers, CommandBufferItem
 
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "config.yml"
-driver_class = Drivers.SIM.value
-trajectory_strategy_class = TrajectoryStrategies.TURN_THEN_MOVE.value
+driver_class = Drivers.WIFI.value
+trajectory_strategy_class = TrajectoryStrategies.FORWARD_AND_TRANSLATE.value
 
 log_dir_path = Path(__file__).parent.parent / "logs"
 log_dir_path.mkdir(parents=True, exist_ok=True)

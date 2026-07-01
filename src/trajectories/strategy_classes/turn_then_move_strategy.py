@@ -10,8 +10,8 @@ from ..trajectory_strategy import TrajectoryStrategy
 
 DEBUG = False
 
-MAX_FORWARD_SPEED: float = 100.0
-MAX_ROTATE_SPEED: float = 100.0
+MAX_FORWARD_SPEED: float = 5.0
+MAX_ROTATE_SPEED: float = 5.0
 
 
 @njit(cache=True, fastmath=True)
