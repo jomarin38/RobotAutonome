@@ -2,7 +2,7 @@
 name = "robot-autonome"
 version = "0.1.0"
 description = "Système de pilotage du robot du club de robotique de claix pour la participation a Erobot senior."
-requires-python = ">=3.13"
+requires-python = "==3.13.13"
 authors = [
     { name = "Your Name", email = "you@example.com" }
 ]
